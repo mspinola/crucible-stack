@@ -58,7 +58,7 @@ this repo exists at all.
 ## Install
 
 ```bash
-pip install -e .            # requires Python 3.11+, and crucible >= 0.2.0
+pip install -e .            # requires Python 3.11+, and crucible >= 0.3.0
 pytest -q
 ```
 

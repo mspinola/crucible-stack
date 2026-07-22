@@ -15,20 +15,19 @@ dependencies = [
     "pandas>=2.0",
     "pyyaml>=6.0",
     "pydantic>=2.0",
-    # NOTE: this pin is weaker than the real requirement, deliberately. We need the
-    # honest-N API -- deflated_sharpe(..., n_trials=) and sidak_correction(SearchSpaceLog)
-    # -- which landed AFTER the v0.2.0 tag, so published 0.2.0 does not actually satisfy
-    # us. Bump to ">=0.3.0" once that release exists.
+    # 0.3.0 is the release that carries the honest-N API this package depends on:
+    # deflated_sharpe(..., n_trials=) and sidak_correction(SearchSpaceLog). Published
+    # 2026-07-22, so the constraint is finally true rather than aspirational.
     #
-    # It is not written as a direct git reference, which was the first attempt: a URL
-    # requirement cannot be reconciled with a consumer that installs crucible from a local
-    # editable checkout, and npf does exactly that. It broke npf's CI with a
-    # ResolutionImpossible. A direct reference would also block PyPI upload.
+    # Kept as a normal version constraint, never a direct git reference. A URL
+    # requirement cannot be reconciled with a consumer that installs crucible from a
+    # local editable checkout, and npf does exactly that; the first attempt at this
+    # broke npf CI with a ResolutionImpossible, and a direct reference also blocks
+    # PyPI upload.
     #
-    # The version constraint is therefore documentation; tests/test_crucible_compat.py is
-    # the actual enforcement, and it fails with an explanation rather than a TypeError
-    # from inside select().
-    "crucible>=0.2.0",
+    # tests/test_crucible_compat.py remains the real enforcement. A version number is
+    # not evidence that an API is present, which is the whole reason that test exists.
+    "crucible>=0.3.0",
 ]
 
 [project.optional-dependencies]
