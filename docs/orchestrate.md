@@ -210,11 +210,17 @@ Two things a book adapter should do, both learned the hard way:
 the difference between two simulators rather than decay in the edge, and reads as drifted on day
 one.
 
-**Import your strategy code lazily, inside the methods that need it.** If your strategy package
-touches a data store at import time, many do, to resolve a universe or open a cache, then a
-module-level import makes the adapter unimportable without that store configured. The missing
-environment variable then surfaces as a test-collection error rather than a clear message. This
-is also what lets `orchestrate` resolve your book by dotted path without ever importing it.
+**Keep data-store access out of import time.** Many strategy packages open a cache or resolve a
+universe when a module is imported. Any adapter that imports such a package then becomes
+unimportable without the store configured, and the missing environment variable surfaces as a
+test-collection error rather than a clear message.
+
+The fix belongs in the data layer, not in every consumer: build the expensive object behind an
+accessor (`get_indexer()`, `get_universe()`) that constructs on first call and caches, so
+importing the module costs nothing and a missing env var is raised at the point of use. Where
+you do not control that layer, defer the import into the methods that need it as a fallback, but
+treat it as a workaround. Deferred imports spread through the codebase one consumer at a time,
+and they make import order load-bearing.
 
 Book adapters live in *your* repo, never in `crucible_stack.orchestrate`. The orchestrator
 resolves them by dotted path and never imports them, which is what lets this framework ship
@@ -234,7 +240,7 @@ nothing until the cadence elapses.
 | Symptom | Cause |
 |---|---|
 | `need >= 2 trial Sharpes` | A one-config search. The correction estimates the spread of trial Sharpes and one trial has none, a single config has no multiple-testing cost and cannot be honestly selected. Give the grid at least two. |
-| `RuntimeError: MY_DATA_STORE is not set` | The env var is missing. It is read at import time by the strategy layer, so this can look like an import bug. |
+| `RuntimeError: MY_DATA_STORE is not set` | The env var is missing. If your strategy layer reads the store at import time this arrives during collection and looks like an import bug. Put the store behind a lazy accessor so it is raised where it is used. |
 | Exit `4` every run | The elapsed period keeps exceeding the cadence, cron is not firing, or `--cadence` is shorter than reality. |
 | Drift never fires | Check the incumbent has an `envelope`. With none attached the drift trigger fires *loudly* rather than staying quiet, so silence means it is being evaluated and not breaching. |
 | Verdict looks too good | Check `honest_n`. If several sweeps share one search, pass one `SearchSpaceLog` (`sweep(search_log=...)`) or every correction is blind to the rest of the search. |
