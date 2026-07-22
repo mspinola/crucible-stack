@@ -341,7 +341,7 @@ the rest.
          var` and `--quiet` fixes the runbook already had.
 7. [x] Wire `npf/requirements.txt` and CI to the new repo, mirroring the existing crucible step.
        **DONE 2026-07-22**, together with the move itself — item 7 turned out to presuppose a
-       repo that no action item created. `crucible-stack` now exists (private until item 10),
+       repo that no action item created. `crucible-stack` now exists (created private, made **public 2026-07-22** once item 10 landed),
        holding `framework/`, `optimize/`, `capital/`, `orchestrate/` and `engine/` (npf's old
        `strategies/simulator.py` + `exits.py`; the rules engine is not a strategy, and
        `strategies/` would have been a misleading name in a repo containing none). npf imports
@@ -458,3 +458,24 @@ the rest.
         - **The lesson to carry into items 7-9:** every remaining item moves files. Re-run the
           evidence at each one. A boundary is a claim about the code as it is now, and this
           document was four days stale after two of its own action items.
+
+---
+
+## Outcome
+
+**All 12 action items closed 2026-07-22, and `crucible-stack` is public as of the same day.**
+
+The last gate was not a checklist item. Going public publishes the whole git history, so the
+tree was audited one final time and `tests/` had never been scanned for findings, only `docs/`
+and the package source. It carried two: a scan result naming a strategy family, and real
+per-book measurements (trade counts, expectancy, Sharpe). Both were in every commit since the
+second one.
+
+They were rewritten to describe the situation each test exists for, and the history was
+rewritten with `filter-branch` so no commit contains them. Verified from a fresh clone rather
+than locally, because the local check passed while `refs/original/` still held the old objects
+and the remote still held the old history.
+
+**The lesson, for the third time in this ADR:** the guards read the AST. A docstring is a
+string constant, and nothing was checking its contents. Every leak found in this extraction
+came from prose, and every one was found by a person looking rather than by a test.
