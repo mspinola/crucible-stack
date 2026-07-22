@@ -16,6 +16,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+__all__ = ["monthly_returns", "weighted_monthly_returns", "max_drawdown",
+           "block_index", "block_bootstrap", "block_bootstrap_paths"]
+
 
 def monthly_returns(trades: pd.DataFrame, risk_frac: float) -> np.ndarray:
     """Monthly account-return series at per-position risk `risk_frac` (fraction of equity risked
@@ -29,7 +32,7 @@ def monthly_returns(trades: pd.DataFrame, risk_frac: float) -> np.ndarray:
     return risk_frac * m.values.astype(float)
 
 
-def _max_drawdown(r: np.ndarray) -> float:
+def max_drawdown(r: np.ndarray) -> float:
     """Max peak-to-trough drawdown of the compounded equity curve, as a fraction (negative)."""
     eq = np.cumprod(1.0 + r)
     peak = np.maximum.accumulate(eq)
@@ -84,3 +87,9 @@ def weighted_monthly_returns(trades: pd.DataFrame, sizes: np.ndarray) -> np.ndar
     m = d.groupby('ym')['contrib'].sum()
     grid = pd.period_range(m.index.min(), m.index.max(), freq='M')
     return m.reindex(grid, fill_value=0.0).values.astype(float)
+
+
+# Kept because a downstream package imported this private name before the API surface was
+# defined. Private-by-underscore is a convention, not a barrier, and once something is
+# actually depended upon the honest move is to name it public rather than to pretend.
+_max_drawdown = max_drawdown

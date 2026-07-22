@@ -10,7 +10,7 @@ from this for six months, start here.
 ## The thesis
 
 Bob Pardo's walk-forward process is the backbone: optimize on a rolling window, validate
-out-of-sample, roll the winner forward, repeat. Working through it surfaced one gap — **Pardo's
+out-of-sample, roll the winner forward, repeat. Working through it surfaced one gap, **Pardo's
 process has no statistical-validity layer.** Pass/fail is magnitude and consistency; never
 significance, and never the cost of having searched.
 
@@ -26,16 +26,16 @@ question, and refuses to answer the next one:
 | **optimizer** (`crucible_stack.optimize`) | which configuration, and what did the search cost? | is it real? |
 | **crucible** (public, MIT) | is the edge real, corrected for the search? | what would it earn? |
 | **capital sim** (`crucible_stack.capital`) | what does an account trading it look like? | should we deploy it? |
-| **orchestrator** (`crucible_stack.orchestrate`) | is it still right, and may it go live? | — |
+| **orchestrator** (`crucible_stack.orchestrate`) | is it still right, and may it go live? | n/a |
 
 The refusals matter as much as the answers. crucible never sees currency, so it cannot be
 tempted to call a big number an edge. The capital sim runs *downstream* of the verdict and never
-re-litigates it — read an equity curve **with** its verdict, never alone. The orchestrator can
+re-litigates it, read an equity curve **with** its verdict, never alone. The orchestrator can
 act, so it is the only layer that may promote, and only through the gate.
 
 ## The seams
 
-The layers connect through four data contracts, and those contracts — not the implementations —
+The layers connect through four data contracts, and those contracts, not the implementations,
 are the invariant. See [seam-contracts.md](design/seam-contracts.md).
 
 ```
@@ -49,7 +49,7 @@ whole stack was built without a heavy backtesting engine, and why one could stil
 behind them. (The decision to wrap a heavy engine was taken and then superseded on exactly
 that evidence, in the strategy repo where this framework was extracted from.)
 
-**`TradeLog` is the pivot.** It is capital-free and denominated in R — one unit of risk. That is
+**`TradeLog` is the pivot.** It is capital-free and denominated in R, one unit of risk. That is
 what lets crucible judge an edge without knowing your account size, and it is why the
 1R↔currency conversion is pinned to a single place (`EquityResult.meta["r_denominator"]`) rather
 than smeared across layers.
@@ -74,7 +74,7 @@ trades still counts. That is the honest denominator: those configs cost you a lo
 
 **Share one ledger across sweeps if the search spans several.** Scanning a universe and keeping
 the best is a search over the universe. Without a shared ledger each market is corrected as if
-it were the only one tried — see *When it says no*, below, for what that costs.
+it were the only one tried, see *When it says no*, below, for what that costs.
 
 ### 2. Get the verdict
 
@@ -87,16 +87,16 @@ for r in sel.reasons:
 
 Three corrections run, and `trustworthy` is the AND of those that could be computed:
 
-- **PBO** — did in-sample winning carry out-of-sample, or is the search overfit?
-- **the search correction** — is the winner's statistic significant given how many were tried?
-- **reality check** — is the edge distinguishable from zero at all?
+- **PBO**, did in-sample winning carry out-of-sample, or is the search overfit?
+- **the search correction**, is the winner's statistic significant given how many were tried?
+- **reality check**, is the edge distinguishable from zero at all?
 
 **The correction follows the objective.** Select on Sharpe and it deflates a Sharpe; select on
 expectancy and it corrects with SPA on per-trade R. Correcting a mean-based search with a
 Sharpe-based test would price a search nobody ran. `Selection.coherent` is False only for a
 custom scorer, where the statistic being optimized is unknowable.
 
-### 3. Size it — but only after the verdict
+### 3. Size it, but only after the verdict
 
 ```python
 from crucible_stack.capital import simulate_equity, equity_bands
@@ -120,7 +120,7 @@ python3 -m crucible_stack.orchestrate --book my_book --ledger var/deployments.js
 
 The loop re-optimizes on a cadence, promotes only what clears the gate, holds the incumbent when
 it does not, and watches the live book against the MC envelope it was provisioned with. It does
-not trade — it decides which parameters are live and records that decision.
+not trade, it decides which parameters are live and records that decision.
 [orchestrate.md](orchestrate.md) is the runbook.
 
 ---
@@ -130,15 +130,15 @@ not trade — it decides which parameters are live and records that decision.
 The stack's most useful behaviour is refusal, and it is worth seeing what that looks like.
 
 Take a scan of 45 markets with 3 configurations each. Two come back at 98% and 99% deflated
-Sharpe, which looks decisive. Priced against the whole 129-variant search they are **0% and 2%**
-— and chance alone predicts about 2.2 false passes at a 5% level over 45 markets, against the 2
+Sharpe, which looks decisive. Priced against the whole 129-variant search they are **0% and 2%**.
+Chance alone predicts about 2.2 false passes at a 5% level over 45 markets, against the 2
 observed. The passes carried essentially no information.
 
 Two inflations stack to produce that, and both are worth recognizing:
 
-1. **Denominator too small** — each market was corrected for its own 3-gate search and was blind
+1. **Denominator too small**, each market was corrected for its own 3-gate search and was blind
    to the other 44. Fixed by sharing one `SearchSpaceLog`.
-2. **Dispersion too small** — three configs scoring similarly make the null's expected maximum
+2. **Dispersion too small**, three configs scoring similarly make the null's expected maximum
    tiny, which flatters the winner. Still true within a small search; read a 100% deflated
    Sharpe as "not the binding constraint here", not as certainty.
 

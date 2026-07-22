@@ -52,6 +52,8 @@ from crucible.validation.pbo import deflated_sharpe
 
 from crucible_stack.optimize.trial_matrix import TrialMatrix
 
+__all__ = ["select", "Selection", "OBJECTIVES"]
+
 
 @dataclass(frozen=True)
 class Selection:

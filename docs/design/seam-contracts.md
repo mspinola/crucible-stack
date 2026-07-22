@@ -24,20 +24,20 @@ library.
 **Ownership / placement.** Each *producer* owns its output contract; each consumer imports
 upstream. So `TradeLog` stays in crucible (exists), `TrialMatrix` lives in the optimizer
 package, `EquityResult` in the capital package, and `DeploymentLedger` in the orchestrator.
-Crucially, **crucible never imports `TrialMatrix`** — it consumes the raw `.returns` DataFrame,
+Crucially, **crucible never imports `TrialMatrix`**, it consumes the raw `.returns` DataFrame,
 so the core stays pure and vbtpro-free (ADR action item #4). A shared `contracts` package is the
 alternative, but four owners + one-directional imports is fewer moving parts for a solo
 maintainer.
 
 ---
 
-## Seam 1 — `TrialMatrix` (optimizer → crucible)
+## Seam 1, `TrialMatrix` (optimizer → crucible)
 
 The output of a parameter search: for every config tried, a periodic return series, plus
 the params that produced it. This is exactly what `crucible.pbo_cscv` / `deflated_sharpe`
 consume to price the search.
 
-**Status: BUILT** — `crucible_stack.optimize.TrialMatrix` (`crucible_stack/optimize/trial_matrix.py`), 13 tests
+**Status: BUILT**, `crucible_stack.optimize.TrialMatrix` (`crucible_stack/optimize/trial_matrix.py`), 13 tests
 in `tests/test_trial_matrix.py` incl. a live composition check against `pbo_cscv` +
 `deflated_sharpe`. Lives in this package; imports only crucible.
 The block below is the as-built API, not a sketch.
@@ -59,9 +59,9 @@ class TrialMatrix:
                  This frame *is* the CSCV/PBO input.
     configs    : config_id -> the params that VARIED to produce that column.
     objective  : name of the score the search selected on (e.g. "deflated_sharpe").
-    fixed      : params held CONSTANT across the search (audit trail — see note below).
+    fixed      : params held CONSTANT across the search (audit trail, see note below).
     trade_logs : optional config_id -> TradeLog, kept for the winner(s) for reality_check.
-    search_log : the SearchSpaceLog the sweep recorded into — source of `honest_n`.
+    search_log : the SearchSpaceLog the sweep recorded into, source of `honest_n`.
     """
     returns: pd.DataFrame
     configs: Mapping[str, dict]
@@ -84,13 +84,13 @@ class TrialMatrix:
         ...
 
     @property
-    def n_trials(self) -> int:                # columns produced — NOT the correction N
+    def n_trials(self) -> int:                # columns produced, NOT the correction N
         return self.returns.shape[1]
 
     @property
     def honest_n(self) -> int:                # the correction denominator, from the ledger
         if self.search_log is None:
-            raise ValueError("no search_log attached; honest_n is unknowable — "
+            raise ValueError("no search_log attached; honest_n is unknowable, "
                              "do NOT substitute n_trials")
         return self.search_log.session_n_variants
 
@@ -114,18 +114,18 @@ class TrialMatrix:
 `strategy(prices, **combo)`) with **no signature introspection at all**. So a `param_grid` of
 `{"fast": [10, 20]}` against `ma_cross(df, fast=20, slow=50, price="Close", kind="sma")`
 silently leaves `slow`/`price`/`kind` at their defaults, and `WalkForwardResult` records only
-the searched grid — **the audit trail is one-sided.** "What did this search actually explore?"
+the searched grid, **the audit trail is one-sided.** "What did this search actually explore?"
 is unanswerable from the artifact. `TrialMatrix.fixed` closes that: the effective values of
 every param that did *not* vary (including the strategy's own defaults and the barrier
 `tp`/`sl`/`timeout`). Without it the seam inherits the same blind spot.
 
 **Design decisions surfaced:**
 - **Unit + granularity of `returns` is load-bearing.** It must be a *periodic* series
-  (e.g. monthly summed R), consistent across columns — that's what makes CSCV and
+  (e.g. monthly summed R), consistent across columns, that's what makes CSCV and
   block-bootstrap honest. Per-trade R aggregated to periods; not raw per-trade rows.
 - **`config_id`** is any stable hashable key; the `configs` map is the source of truth for
   what it means. Keep it human-readable if you can (helps audit).
-- Storing `trade_logs` for *all* trials is optional and usually wasteful — keep it for the
+- Storing `trade_logs` for *all* trials is optional and usually wasteful, keep it for the
   selected winner(s) so `reality_check` / the tearsheet can run on them.
 - **`honest_n` refuses to guess.** The as-built API does not expose a fallback: `honest_n`
   raises unless a `SearchSpaceLog` is attached, so the correction denominator can only ever
@@ -134,34 +134,34 @@ every param that did *not* vary (including the strategy's own defaults and the b
 
 ---
 
-### Seam 1b — `SearchSpaceLog` (the search ledger)
+### Seam 1b, `SearchSpaceLog` (the search ledger)
 
 **Don't invent search accounting; crucible already has it.** `crucible.validation.SearchSpaceLog`
 (promoted out of the strategy repo per crucible's ADR-0002) is an append-only JSONL ledger of every variant tried, with
 `record(params, score, status)` where status ∈ `('tried','discarded','selected')`,
-`mark_selected()`, and two counts — `n_variants` (all, incl. prior runs loaded from disk) and
+`mark_selected()`, and two counts, `n_variants` (all, incl. prior runs loaded from disk) and
 `session_n_variants` (this process only, so re-running a symbol can't inflate its own penalty).
 
 Its rationale is exactly the optimizer sibling's thesis, in its own words:
 
 > *"Aronson's data-mining-bias correction is only valid if it sees the full set of variants
-> attempted — including the ones discarded — not just the winner... An incomplete log silently
+> attempted, including the ones discarded, not just the winner... An incomplete log silently
 > degrades Stage 3 back into the point-threshold gating the framework exists to prevent."*
 
-And it was **designed for this job already** — its own docstring gives `'GC:parameter_search'`
+And it was **designed for this job already**, its own docstring gives `'GC:parameter_search'`
 as the canonical scope. A walk-forward driver that logs only the IS-window matrix, without
 recording each grid point, leaves `n_variants` counting windows rather than the search.
 
-**⚠️ `n_variants` ≠ `TrialMatrix.n_trials` — do not conflate them.** `n_trials` is
+**⚠️ `n_variants` ≠ `TrialMatrix.n_trials`, do not conflate them.** `n_trials` is
 `returns.shape[1]`: configs that successfully *produced a return column*. `n_variants` counts
-everything **tried, including failures** — configs that errored, or yielded too few trades to
+everything **tried, including failures**, configs that errored, or yielded too few trades to
 score. So `n_variants >= n_trials`, and **the honest correction denominator is `n_variants`**.
 Feeding `deflated_sharpe`/`sidak` the `TrialMatrix` column count would silently *undercount the
-search* and flatter the result — the exact failure the ledger exists to prevent. **As built,
+search* and flatter the result, the exact failure the ledger exists to prevent. **As built,
 `TrialMatrix.honest_n` enforces this**: it returns `search_log.session_n_variants` and raises if
 no ledger is attached, so there is no code path that hands a correction the column count.
 
-**RESOLVED — it lives in crucible.** `SearchSpaceLog` is pure, capital-free
+**RESOLVED, it lives in crucible.** `SearchSpaceLog` is pure, capital-free
 statistical-honesty accounting, which is crucible's remit. It was promoted there (crucible's
 ADR-0002), and as of **crucible 0.3.0** the corrections take the ledger directly rather than a
 count someone retyped: `sidak_correction(p, log)`, `run_gauntlet(..., n_variants=log)` and
@@ -171,7 +171,7 @@ correction it was built for. Prefer passing the ledger everywhere; an int is the
 
 ---
 
-## Seam 2 — `TradeLog` (crucible, exists)
+## Seam 2, `TradeLog` (crucible, exists)
 
 The **pivot** both new seams orient around. Capital-free, R-multiple. Already defined in
 `crucible/src/crucible/edge/trade_log.py`; unchanged. Recap of the contract:
@@ -183,12 +183,12 @@ The **pivot** both new seams orient around. Capital-free, R-multiple. Already de
 ```
 
 Everything upstream (the sweep) must be able to *emit* a `TradeLog` per config; everything
-downstream (the capital sim) *consumes* one. It never carries capital, currency, or sizing —
+downstream (the capital sim) *consumes* one. It never carries capital, currency, or sizing,
 that's the whole reason it composes.
 
 ---
 
-## Seam 3 — `EquityResult` (capital sim → orchestrator / reporting)
+## Seam 3, `EquityResult` (capital sim → orchestrator / reporting)
 
 The currency-world twin of `TradeLog`: what you get once a risk/sizing model turns an edge
 into an account. This is the RealTest-like output crucible deliberately refuses to compute.
@@ -206,7 +206,7 @@ class EquityStats:
     sharpe: float
     sortino: float
     exposure: float        # avg fraction of capital deployed
-    # extend freely — this is the layer crucible won't touch
+    # extend freely, this is the layer crucible won't touch
 
 @dataclass(frozen=True)
 class EquityResult:
@@ -214,7 +214,7 @@ class EquityResult:
 
     equity  : Series  index = time, value = account equity (currency).
     returns : Series  periodic account returns (feeds MC-on-equity, downstream stats).
-    trades  : DataFrame  per-trade records IN CURRENCY (entry/exit/price/qty/pnl/pct) —
+    trades  : DataFrame  per-trade records IN CURRENCY (entry/exit/price/qty/pnl/pct),
               the currency twin of TradeLog.
     stats   : headline equity statistics (CAGR/MaxDD/Sharpe/...).
     """
@@ -235,26 +235,26 @@ class EquityResult:
                              "these assumptions are not optional.")
 ```
 
-**The 1R-denominator lives HERE** (ADR action item #3). The R↔currency conversion — sizing
+**The 1R-denominator lives HERE** (ADR action item #3). The R↔currency conversion, sizing
 an R-multiple edge into currency, or its inverse when importing an external currency trade
-log back into a `TradeLog` — is owned at *this* seam's adapter, recorded in
+log back into a `TradeLog`, is owned at *this* seam's adapter, recorded in
 `meta["r_denominator"]`, and nowhere else. That keeps the modeling assumption in exactly
 one auditable place instead of smeared across layers.
 
 ---
 
-## Seam 4 — `DeploymentLedger` (orchestrator → live trading, and back to signal)
+## Seam 4, `DeploymentLedger` (orchestrator → live trading, and back to signal)
 
-The append-only record of **every decision the re-optimization loop makes** — what it deployed,
+The append-only record of **every decision the re-optimization loop makes**, what it deployed,
 what it refused to deploy, and the evidence that justified either. It is the orchestrator's
 durable state, and `current()` is the live parameter set the trading path reads.
 
-**Status: BUILT** — `crucible_stack.orchestrate.ledger` (`crucible_stack/orchestrate/ledger.py`), 24 tests in
+**Status: BUILT**, `crucible_stack.orchestrate.ledger` (`crucible_stack/orchestrate/ledger.py`), 24 tests in
 `tests/test_ledger.py`. Specified by
 [ADR-0003](../adr/ADR-0003-deployment-orchestrator-as-stateful-reoptimization-loop.md)
 (commitment 1). Deliberately mirrors `SearchSpaceLog`'s idiom (append-only, in-memory by
 default, opt-in JSONL) rather than `TradeLog`'s frozen-frame idiom, because this seam *is*
-state — that is its whole job. The block below is the as-built API.
+state, that is its whole job. The block below is the as-built API.
 
 **Multi-book from the start.** Entries carry a `book` key and `current(book)` resolves per
 book; single-book use is one key. The orchestrator is expected to run a family of strategy
@@ -274,7 +274,7 @@ Action = Literal["promote", "hold", "halt"]
 class DeploymentEntry:
     """One decision by the loop: what it did, why it was allowed to, on what evidence.
 
-    Self-contained by design — an auditor must never have to re-run the optimizer to
+    Self-contained by design, an auditor must never have to re-run the optimizer to
     learn why a parameter set went live (or why one didn't).
     """
     book: str                       # multi-book from the start; one key for a single book
@@ -283,11 +283,11 @@ class DeploymentEntry:
     trigger: str                    # what fired this cycle: "schedule" | "drift"
     params: Mapping[str, object]    # the param set this decision concerns
     verdict: str                    # Selection's verdict, verbatim
-    trustworthy: bool               # the gate's boolean — what actually authorized action
+    trustworthy: bool               # the gate's boolean, what actually authorized action
     reasons: Tuple[str, ...]        # Selection.reasons, verbatim (pbo / dSR / reality)
     honest_n: int                   # search cost that priced the verdict (ledger-derived)
     fit_window: Tuple[pd.Timestamp, pd.Timestamp]   # IS window the params were fit on
-    envelope: Mapping[str, object]  # MC envelope SNAPSHOT at deploy time — see below
+    envelope: Mapping[str, object]  # MC envelope SNAPSHOT at deploy time, see below
     equity_ref: Optional[str] = None   # pointer to the EquityResult run, not a copy of it
 
 
@@ -304,13 +304,13 @@ class DeploymentLedger:
 
     def current(self) -> Optional[DeploymentEntry]:
         """The live parameter set = the most recent action == "promote".
-        Returns None before the first promotion (cold start — the loop has nothing live)."""
+        Returns None before the first promotion (cold start, the loop has nothing live)."""
 
     def history(self, action: Optional[Action] = None) -> Sequence[DeploymentEntry]: ...
 
     @property
     def incumbent_age(self) -> Optional[pd.Timedelta]:
-        """How long the current params have been live — the schedule trigger reads this."""
+        """How long the current params have been live, the schedule trigger reads this."""
 ```
 
 **Design decisions surfaced:**
@@ -320,17 +320,17 @@ class DeploymentLedger:
   then the audit trail is decorative. One source of truth: the history *is* the state.
 - **Refusals are recorded, not just deployments.** `action` includes `hold` and `halt` precisely
   so the question *"why are we still on the old parameters?"* is answerable. A loop that only
-  logs promotions makes its most important behaviour — declining to deploy an untrustworthy
-  re-opt — invisible. ADR-0003's gate writes to the ledger on **both** branches.
+  logs promotions makes its most important behaviour, declining to deploy an untrustworthy
+  re-opt, invisible. ADR-0003's gate writes to the ledger on **both** branches.
 - **⚠️ `envelope` is a SNAPSHOT taken at deploy time and never recomputed.** This is the subtle
   trap in the whole design. The drift monitor asks "has the live curve escaped the envelope these
   params were *provisioned with*." If the envelope is instead recomputed from current data at
   comparison time, it silently **re-baselines onto the drifted reality** and the trigger can never
-  fire — a drift monitor that is structurally incapable of detecting drift. Freeze it at
+  fire, a drift monitor that is structurally incapable of detecting drift. Freeze it at
   promotion and compare against the frozen copy forever.
 - **⚠️ …and the snapshot must persist LOSSLESSLY, which overrides "store a compact summary."**
   Building it surfaced the corollary: if the frozen envelope cannot round-trip through the JSONL
-  file, then every process restart forces the loop to rebuild one — re-baselining arriving by the
+  file, then every process restart forces the loop to rebuild one, re-baselining arriving by the
   back door, with nothing visibly wrong. So the full per-elapsed-period quantile grid is stored,
   not headline figures. A test asserts a restarted ledger yields a byte-identical drift verdict;
   rounding `cum_r` to one decimal fails it.
@@ -363,6 +363,6 @@ it on the wrong side of *both* axes in ADR-0003's promotion path. The pure primi
   silently inherits an unstated choice.
 - **State is confined to exactly one seam.** Seams 1–3 are pure handoffs and stay trivially
   testable. `DeploymentLedger` is the *only* contract that persists, carries a clock, or feeds
-  backward — so the hard parts of statefulness (durability, atomicity, cold start, audit) are
+  backward, so the hard parts of statefulness (durability, atomicity, cold start, audit) are
   cornered in one place instead of smeared across the toolchain, exactly as the 1R denominator is
   cornered in Seam 3.

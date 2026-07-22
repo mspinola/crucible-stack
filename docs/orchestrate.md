@@ -1,11 +1,11 @@
 # Running the re-optimization loop
 
-Operating guide for `crucible_stack.orchestrate` — the deployment orchestrator. For *why it is built
+Operating guide for `crucible_stack.orchestrate`, the deployment orchestrator. For *why it is built
 this way*, see [ADR-0003](adr/ADR-0003-deployment-orchestrator-as-stateful-reoptimization-loop.md);
 for the data contract it persists, see [seam-contracts.md](design/seam-contracts.md) (Seam 4).
 
 > **Not to be confused with `core.walk_forward_engine.WalkForwardOrchestrator`**, which runs a
-> strategy across rolling windows and hands back a result. That is a *lens* — you call it, you
+> strategy across rolling windows and hands back a result. That is a *lens*, you call it, you
 > read the answer, nothing persists. This is the opposite: a long-lived loop that holds state
 > and decides what your live book should be trading.
 
@@ -15,11 +15,11 @@ for the data contract it persists, see [seam-contracts.md](design/seam-contracts
 
 A strategy's parameters are fit to a window of history. Markets move; the window slides; the
 parameters go stale. Nothing announces this. The book keeps trading, the numbers drift, and the
-question *"are these still the right parameters?"* only gets asked when something looks wrong —
+question *"are these still the right parameters?"* only gets asked when something looks wrong,
 which is exactly when you are least able to answer it calmly.
 
 Walk-forward analysis is normally run **once**, as a validation gate: *did this survive
-out-of-sample?* Pardo's actual practice is to run it **continuously** — periodically re-optimize
+out-of-sample?* Pardo's actual practice is to run it **continuously**, periodically re-optimize
 on the most recent window and roll the winning parameters forward into live trading. That is a
 live operating system, not a one-time test, and this package is that system.
 
@@ -28,7 +28,7 @@ live operating system, not a one-time test, and this package is that system.
 You could re-fit every six months yourself. Four things make that go wrong, and each is
 something the loop does structurally:
 
-**It can refuse.** A re-optimization that does not clear the honesty gate cannot be deployed —
+**It can refuse.** A re-optimization that does not clear the honesty gate cannot be deployed,
 the loop keeps the incumbent parameters and records why. Hand re-fitting has no such brake: you
 re-fit, the numbers look good *because you just fit them*, and you deploy. "The new parameters
 are not trustworthy, stay on the old ones" is a first-class outcome here, not an act of
@@ -40,7 +40,7 @@ and twenty searches is a much higher bar than one. The loop knows that; a person
 hand almost never does.
 
 **It watches for drift.** Not just *"has the calendar rolled?"* but *"has the live book left the
-envelope it was provisioned with?"* — measured against the simulation's own block-bootstrap
+envelope it was provisioned with?"*, measured against the simulation's own block-bootstrap
 bands rather than a threshold someone picked. If the live curve escapes the band it was
 deployed within, the loop re-optimizes early instead of waiting out the cadence.
 
@@ -51,7 +51,7 @@ months later, without re-running anything.
 ## What the cron job is actually for
 
 **It is a heartbeat, not a batch job.** Cron wakes the loop up; the loop decides whether
-anything needs doing. Most invocations do nothing at all, and that is the design working — a
+anything needs doing. Most invocations do nothing at all, and that is the design working, a
 cycle that does not fire writes nothing to the ledger, because a non-event is not a decision and
 one entry per cron tick would bury the real ones.
 
@@ -63,7 +63,7 @@ Cron is doing exactly two things:
 
 **The cron job does not trade.** It places no orders and sizes no positions. It decides which
 parameter set is live and records that decision; your trading path reads
-`ledger.current(book)`. Keeping the decider and the executor separate is deliberate — this
+`ledger.current(book)`. Keeping the decider and the executor separate is deliberate, this
 process can be killed, restarted, or skipped entirely without touching a position.
 
 ---
@@ -78,7 +78,7 @@ MY_DATA_STORE=/path/to/store .venv/bin/python -m crucible_stack.orchestrate \
   --cadence 6
 ```
 
-A crontab entry — monthly, 06:30 on the 1st:
+A crontab entry, monthly, 06:30 on the 1st:
 
 ```cron
 30 6 1 * * cd /path/to/your/repo && mkdir -p var && MY_DATA_STORE=/path/to/store \
@@ -88,11 +88,11 @@ A crontab entry — monthly, 06:30 on the 1st:
 ```
 
 **`mkdir -p var` is not decoration.** The shell redirect is set up *before* Python runs, so
-if `var/` does not exist the job dies with exit 1 and **no log — because the log is what
+if `var/` does not exist the job dies with exit 1 and **no log, because the log is what
 failed.** The ledger creates its own directory; the redirect cannot.
 
 **`--quiet` is what makes the exit codes mean anything.** cron mails you when a job produces
-output, and it ignores exit status entirely — so with everything redirected to a log, an
+output, and it ignores exit status entirely, so with everything redirected to a log, an
 unattended job is silent even when it HALTs. Under `--quiet` a cycle that neither fired nor
 fell behind prints nothing at all, so you can drop the redirect (or keep it) and hear from
 cron only when there is a decision, a skipped window, or a failure.
@@ -124,7 +124,7 @@ python3 -m crucible_stack.orchestrate --status --book my_book --ledger var/deplo
   history: promote=1, hold=0, halt=0
 ```
 
-Reads the ledger only — no book factory, no `MY_DATA_STORE`, no simulation. It also prints
+Reads the ledger only, no book factory, no `MY_DATA_STORE`, no simulation. It also prints
 `OVERDUE` when the incumbent is more than a cadence past due.
 
 **You do not have to run the loop on a schedule.** It tracks its own lateness: run a cycle
@@ -147,16 +147,16 @@ correctness. Running it irregularly is safe, just noisier.
 
 | Code | Meaning | What to do |
 |---|---|---|
-| `0` | Cycle completed — no-op, hold, or promote | Nothing. |
-| `3` | **HALT** — nothing is safe to trade | Look. The candidate was refused and there is no incumbent to fall back on, so the book is flat. |
+| `0` | Cycle completed, no-op, hold, or promote | Nothing. |
+| `3` | **HALT**, nothing is safe to trade | Look. The candidate was refused and there is no incumbent to fall back on, so the book is flat. |
 | `4` | A scheduled window was **skipped** | The job did not run when it should have. Check cron, the machine, the log. |
 | `1` | The cycle raised | Read stderr; the exception type and message are printed. |
 
 ### The three actions
 
-- **`promote`** — the candidate cleared the gate and is now live.
-- **`hold`** — the candidate was refused; the incumbent keeps trading.
-- **`halt`** — the candidate was refused and there *is* no incumbent. Nothing is live. This is
+- **`promote`**, the candidate cleared the gate and is now live.
+- **`hold`**, the candidate was refused; the incumbent keeps trading.
+- **`halt`**, the candidate was refused and there *is* no incumbent. Nothing is live. This is
   not a failure state, it is the honest one: on a cold start with an unproven book, flat is
   correct.
 
@@ -169,8 +169,8 @@ correctness. Running it irregularly is safe, just noisier.
  "envelope": null, "equity_ref": null, "reasons": [...]}
 ```
 
-- `trigger` — what fired: `schedule`, `drift`, or `schedule+drift` when both did.
-- `honest_n` — how many configs the search tried. This is the multiple-testing denominator, and
+- `trigger`, what fired: `schedule`, `drift`, or `schedule+drift` when both did.
+- `honest_n`, how many configs the search tried. This is the multiple-testing denominator, and
   it is the ledger's count, not the number that produced results.
 - **`envelope` is `null` on `hold`/`halt`, and that is deliberate.** An envelope is the
   authorization artifact of a promotion; a refused candidate provisioned nothing. It also
@@ -200,7 +200,7 @@ def reoptimize() -> Reoptimization:
 
 def realized_r_since(since, params) -> Sequence[float]:
     """Periodic R the LIVE configuration produced since it went live.
-    `since` and `params` come off the ledger's current entry — the book cannot know
+    `since` and `params` come off the ledger's current entry, the book cannot know
     when its own parameters were promoted."""
 ```
 
@@ -211,7 +211,7 @@ the difference between two simulators rather than decay in the edge, and reads a
 one.
 
 **Import your strategy code lazily, inside the methods that need it.** If your strategy package
-touches a data store at import time — many do, to resolve a universe or open a cache — then a
+touches a data store at import time, many do, to resolve a universe or open a cache, then a
 module-level import makes the adapter unimportable without that store configured. The missing
 environment variable then surfaces as a test-collection error rather than a clear message. This
 is also what lets `orchestrate` resolve your book by dotted path without ever importing it.
@@ -233,8 +233,8 @@ nothing until the cadence elapses.
 
 | Symptom | Cause |
 |---|---|
-| `need >= 2 trial Sharpes` | A one-config search. The correction estimates the spread of trial Sharpes and one trial has none — a single config has no multiple-testing cost and cannot be honestly selected. Give the grid at least two. |
+| `need >= 2 trial Sharpes` | A one-config search. The correction estimates the spread of trial Sharpes and one trial has none, a single config has no multiple-testing cost and cannot be honestly selected. Give the grid at least two. |
 | `RuntimeError: MY_DATA_STORE is not set` | The env var is missing. It is read at import time by the strategy layer, so this can look like an import bug. |
-| Exit `4` every run | The elapsed period keeps exceeding the cadence — cron is not firing, or `--cadence` is shorter than reality. |
+| Exit `4` every run | The elapsed period keeps exceeding the cadence, cron is not firing, or `--cadence` is shorter than reality. |
 | Drift never fires | Check the incumbent has an `envelope`. With none attached the drift trigger fires *loudly* rather than staying quiet, so silence means it is being evaluated and not breaching. |
 | Verdict looks too good | Check `honest_n`. If several sweeps share one search, pass one `SearchSpaceLog` (`sweep(search_log=...)`) or every correction is blind to the rest of the search. |

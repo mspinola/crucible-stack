@@ -25,6 +25,9 @@ from crucible_stack.orchestrate.trigger import (
     DriftTrigger, ScheduleTrigger, Trigger, TriggerContext, TriggerDecision, any_of,
 )
 from crucible_stack.orchestrate.ledger import ACTIONS, DeploymentEntry, DeploymentLedger
+from crucible_stack.orchestrate.runner import (
+    CycleResult, Reoptimization, missed_windows, run_cycle,
+)
 
 __all__ = ["GateDecision", "evaluate", "is_promotable",
            "DriftEnvelope", "DriftVerdict", "build_envelope", "check_drift",
@@ -32,4 +35,5 @@ __all__ = ["GateDecision", "evaluate", "is_promotable",
            "provision_envelope", "check_account_drift", "monthly_r", "in_currency",
            "Trigger", "TriggerContext", "TriggerDecision", "ScheduleTrigger",
            "DriftTrigger", "any_of",
-           "DeploymentEntry", "DeploymentLedger", "ACTIONS"]
+           "DeploymentEntry", "DeploymentLedger", "ACTIONS",
+           "run_cycle", "CycleResult", "Reoptimization", "missed_windows"]

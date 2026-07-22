@@ -26,6 +26,8 @@ import pandas as pd
 from crucible_stack.framework.strategy import TRADE_LOG_COLUMNS
 from crucible_stack.engine.exits import ATR_STOP_MULT, DEFAULT_EXIT_MODE, get_exit
 
+__all__ = ["simulate_rules"]
+
 
 def simulate_rules(df: pd.DataFrame, direction: str, is_equity: bool,
                    setup_mask: pd.Series, trigger_mask: pd.Series,

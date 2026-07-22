@@ -19,6 +19,8 @@ from typing import Any, Dict, Optional
 
 import pandas as pd
 
+__all__ = ["RulesStrategy", "TRADE_LOG_COLUMNS"]
+
 # The per-trade columns the Pardo scoring stack consumes (see pure_edge/simulator.py
 # and pure_edge/metrics.calculate_phase_3_metrics). `pct_return` is in R-multiples.
 TRADE_LOG_COLUMNS = [

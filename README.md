@@ -93,7 +93,12 @@ upload. Pin normally and enforce the API with a test.
 
 ## Status
 
-Early. The API is not yet stable and will change without ceremony until a stability policy
-lands. Extracted from a working private strategy repo rather than designed in the abstract,
+Early. Extracted from a working private strategy repo rather than designed in the abstract,
 which shows in both directions: the seams are load-bearing and have been used in anger, and
 the naming still carries some of its origin.
+
+While `0.x`, **breaking changes may land in a minor release**, but never silently, and
+removals go through deprecation. What counts as public, what is deliberately excluded, and
+what changes at `1.0` are all in [docs/api-stability.md](docs/api-stability.md). The surface
+it describes is pinned by `tests/test_public_api.py`, so the policy is checked rather than
+promised.

@@ -395,8 +395,28 @@ the rest.
          **zero** cases and reported green. Only `test_there_is_something_to_check` failed,
          which is the whole reason that assertion exists. A guard that stops seeing its target
          passes forever.
-10. [ ] Write an **API stability policy** before the framework is published. Interfaces others
+10. [x] Write an **API stability policy** before the framework is published. Interfaces others
         write against cannot keep changing at will.
+        **DONE 2026-07-22.** `docs/api-stability.md` is the promise; `tests/test_public_api.py`
+        is the mechanism, and pins the exact surface. A policy in prose alone gets broken by a
+        rename in an unrelated refactor and nobody notices until an install downstream fails,
+        so the guard is mutation-checked: removing a name, adding an unpinned export, deleting
+        a deprecated alias, and advertising a name that does not exist were each confirmed to
+        make it fail.
+        - *** **Writing the surface down found it was not defined.** `Reoptimization` — the
+          return type a book adapter must construct — was **not exported at all**, so the
+          orchestrator's own protocol could not be implemented without reaching into a
+          submodule. Neither could `run_cycle`. And a downstream package had come to depend on
+          `montecarlo._max_drawdown`, private by convention and public in fact. It is now
+          `max_drawdown`, with the old name kept as a deprecated alias and npf migrated off it.
+        - Five modules had **no `__all__`**, so their public surface was whatever happened to
+          be importable. `framework.config`, `framework.montecarlo`, `framework.strategy`,
+          `optimize.select` and `engine.simulator` now declare one.
+        - The policy states the pre-1.0 position plainly rather than burying it: **breaking
+          changes may land in a minor release while 0.x**, never silently, with deprecation
+          where skipping it would cost anything. Registry *contents*, numerical output and
+          exception messages are explicitly outside the promise.
+        - A `CHANGELOG.md` now exists, which the policy depends on to make "never silent" true.
 11. [x] Note the multi-editable-install hazard in both READMEs.
         **DONE 2026-07-22.** npf's README gains an *editable-install hazard* section under
         setup; crucible-stack's gains *If you install this editable, read this first*, aimed

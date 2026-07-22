@@ -125,7 +125,8 @@ and this field are both shaped to avoid.
 
 ## Further reading
 
-- [toolchain.md](toolchain.md) — the end-to-end guide: why you would run this, and how
-- [orchestrate.md](orchestrate.md) — operating the deployment loop
-- [design/seam-contracts.md](design/seam-contracts.md) — the four seam contracts in detail
-- [adr/](adr/) — the decision records, including why this repo exists at all
+- [toolchain.md](toolchain.md), the end-to-end guide: why you would run this, and how
+- [orchestrate.md](orchestrate.md), operating the deployment loop
+- [api-stability.md](api-stability.md), what is public, and what may change when
+- [design/seam-contracts.md](design/seam-contracts.md), the four seam contracts in detail
+- [adr/](adr/), the decision records, including why this repo exists at all
