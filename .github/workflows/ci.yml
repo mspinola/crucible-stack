@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# This package depends on `crucible` and nothing else of ours. That short list is the
+# whole point of the repo, so CI installs from pyproject rather than checking out a
+# sibling tree: if a strategy dependency ever creeps in, the install fails here rather
+# than in someone else's environment.
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run tests
+        # No COTDATA_STORE, and no strategy repo on the path. The boundary tests assert
+        # that explicitly; running the whole suite this way means every other test would
+        # also fail if the package quietly grew a dependency on one.
+        run: python -m pytest tests/ -q
