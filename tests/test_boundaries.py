@@ -133,12 +133,26 @@ def test_no_strategy_vocabulary_in_the_public_surface():
     that cries wolf gets deleted. Docstrings may discuss why the COT default was removed;
     what must not exist is a *symbol* named for one strategy's world.
     """
-    banned = ("cot", "willco", "comms", "npf", "cmr", "donchian")
+    banned = ("cot_", "willco", "comms_idx", "lrg_idx", "sml_idx", "_neutral", "donchian")
     offenders = []
     for path in _modules():
-        for node in ast.walk(ast.parse(path.read_text())):
+        tree = ast.parse(path.read_text())
+        # Definitions, references, attribute access, and short string literals. Ported from
+        # npf's engine guard, which was stricter than a name-only scan: a COT column read as
+        # `df["comms_idx"]` is a Constant, not an identifier, and would slip past one.
+        surface = set()
+        for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                low = node.name.lower()
-                if any(b in low for b in banned):
-                    offenders.append(f"{path.relative_to(PKG)}:{node.lineno} {node.name}")
-    assert not offenders, "strategy vocabulary in the public API surface:\n  " + "\n  ".join(offenders)
+                surface.add(node.name)
+            elif isinstance(node, ast.Name):
+                surface.add(node.id)
+            elif isinstance(node, ast.Attribute):
+                surface.add(node.attr)
+            elif isinstance(node, ast.Constant) and isinstance(node.value, str) and len(node.value) < 40:
+                surface.add(node.value)
+        leaked = sorted(s for s in surface if any(b in s.lower() for b in banned))
+        if leaked:
+            offenders.append(f"{path.relative_to(PKG)}: {leaked}")
+    assert not offenders, (
+        "strategy vocabulary in the framework:\n  " + "\n  ".join(offenders) +
+        "\nDocstrings may explain why a COT default was removed; code may not name one.")

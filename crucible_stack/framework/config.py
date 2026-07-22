@@ -1,5 +1,5 @@
 import yaml
-from typing import List, Dict, Optional, Literal, Any
+from typing import List, Dict, Optional, Literal, Any, Type
 from pydantic import BaseModel, Field, ValidationError
 
 # ==========================================
@@ -42,21 +42,6 @@ class MLConfig(BaseModel):
     model_type: str = "xgboost"
     prediction_target: str = "triple_barrier"
     barrier_definitions: BarrierDefinitions
-
-class EntryLogic(BaseModel):
-    min_tp_probability: List[float]
-    max_sl_probability: List[float]
-    armed_window_bars: List[int]
-    reversal_patterns: List[str]
-
-class ExitLogic(BaseModel):
-    take_profit_atr: float
-    macro_neutral_line: int
-    max_stop_loss_atr: float
-
-class StrategySpaceConfig(BaseModel):
-    entry_logic: EntryLogic
-    exit_logic: ExitLogic
 
 class AlphaValidatorConfig(BaseModel):
     enabled: bool = True
@@ -107,7 +92,13 @@ class MasterConfig(BaseModel):
     data: DataConfig
     # ML-only blocks are optional so a rules config validates without them.
     ml_module: Optional[MLConfig] = None
-    strategy_space: Optional[StrategySpaceConfig] = None
+    # Free-form ON PURPOSE. This used to be a typed `StrategySpaceConfig` whose
+    # `EntryLogic`/`ExitLogic` required fields like `macro_neutral_line` and
+    # `reversal_patterns` -- one strategy's parameter names, which every OTHER strategy
+    # would have been forced to declare. Same rule as the registries: the framework owns
+    # the slot, not the contents. Give it a typed shape by subclassing MasterConfig and
+    # narrowing this field, then pass your subclass to `load_config(..., model=...)`.
+    strategy_space: Optional[Any] = None
     alpha_validator: Optional[AlphaValidatorConfig] = None
     # Rules-strategy selector (required for strategy_type == 'rules').
     strategy: Optional[StrategyConfig] = None
@@ -122,9 +113,12 @@ class MasterConfig(BaseModel):
 # PARSER LOGIC
 # ==========================================
 
-def load_config(file_path: str) -> MasterConfig:
-    """
-    Reads a YAML file and validates it against the MasterConfig Pydantic schema.
+def load_config(file_path: str, model: Type[BaseModel] = MasterConfig) -> BaseModel:
+    """Read a YAML file and validate it against `model` (MasterConfig by default).
+
+    `model` exists so a strategy repo can narrow the schema -- typically by subclassing
+    MasterConfig and giving `strategy_space` its own typed shape -- without the framework
+    needing to know any of those field names.
     """
     with open(file_path, 'r') as file:
         try:
@@ -134,7 +128,7 @@ def load_config(file_path: str) -> MasterConfig:
 
     try:
         # This unpacks the dictionary and validates types instantly
-        config = MasterConfig(**yaml_dict)
+        config = model(**yaml_dict)
         return config
     except ValidationError as e:
         print("\n[!] CRITICAL: Configuration Validation Failed!")
