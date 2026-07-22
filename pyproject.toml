@@ -15,7 +15,13 @@ dependencies = [
     "pandas>=2.0",
     "pyyaml>=6.0",
     "pydantic>=2.0",
-    "crucible>=0.2.0",
+    # TEMPORARY direct reference, not a normal pin. The honest-N API this package
+    # depends on -- deflated_sharpe(..., n_trials=) and sidak_correction(SearchSpaceLog)
+    # -- landed in crucible after the v0.2.0 tag, so PyPI 0.2.0 does NOT satisfy us and
+    # "crucible>=0.2.0" would resolve to a version that TypeErrors inside select().
+    # Replace with "crucible>=0.3.0" once that release is published; this repo cannot
+    # be uploaded to PyPI while a direct reference is here.
+    "crucible @ git+https://github.com/mspinola/crucible@main",
 ]
 
 [project.optional-dependencies]
