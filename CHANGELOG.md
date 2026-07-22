@@ -7,6 +7,13 @@ breaking change are governed by [docs/api-stability.md](docs/api-stability.md).
 ## [Unreleased]
 
 ### Added
+- **`tests/test_no_findings_in_prose.py`**, a guard on the writing rather than the code.
+  The boundary guard reads the syntax tree, so it cannot see a docstring or a markdown
+  file, and every leak found while extracting this framework came through prose. This
+  scans for the *shape of a result* (money, measured edges, private strategy identifiers,
+  verdicts attached to a named book) rather than for strategy vocabulary, which would fire
+  on honest provenance notes and get itself deleted. Regression-tested against the real
+  leaks that occurred, and against ordinary framework prose that must not fire.
 - **[docs/api-stability.md](docs/api-stability.md)**, the API stability policy, pinned by
   `tests/test_public_api.py`. What is public is exactly what a listed module names in
   `__all__`; registry *contents*, numerical output and exception messages are explicitly

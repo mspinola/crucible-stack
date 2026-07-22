@@ -16,6 +16,13 @@ The framework never imports a strategy. That is checked by `tests/test_boundarie
 left to discipline, and the guard is mutation-tested so it fails when the boundary actually
 breaks rather than only when someone remembers to look.
 
+There is a second guard, and it exists because of where the leaks actually were.
+`test_boundaries.py` reads the syntax tree, so it cannot see a docstring or a markdown
+file, and every leak found while extracting this framework came through prose rather than
+through an import. `tests/test_no_findings_in_prose.py` scans the writing for the shape of a
+*result*: money, measured edges, private identifiers, and verdicts attached to a named book.
+Generic prose about what clears the gate is fine. Reporting which book did is not.
+
 ## The layering
 
 ```mermaid
