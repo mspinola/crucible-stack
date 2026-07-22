@@ -159,8 +159,9 @@ answer, not after.
 - **A drift envelope built on the same history it is measured against is in-sample.** It
   demonstrates the machinery, not the book's health.
 - **Strategy layers often read a data store at import time**, so a missing environment variable
-  can surface as an import or collection error rather than a clear message. Import your strategy
-  code lazily inside the methods that need it.
+  can surface as an import or collection error rather than a clear message. Put the expensive
+  object behind an accessor that builds on first call, so importing costs nothing and the error
+  is raised where the data is actually used.
 
 ## Where to go next
 
