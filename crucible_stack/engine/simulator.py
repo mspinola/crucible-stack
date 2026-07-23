@@ -13,6 +13,8 @@ Generalizes `validation.cmr_native_holdout.simulate_cmr_native`:
     and strategy-specific modes such as {'cot_neutral', legs} register themselves
     (npf.strategies.cot_exits). Default: 'barriers' — the only mode needing nothing but OHLC.
   • entry_fill ∈ 'close' | 'next_open'
+  • entry_delay: extra bars to wait before filling (latency / adverse-execution
+    stress). 0 reproduces the historical fill exactly; 1 fills one bar later.
   • friction: `cost_r` R deducted per trade (0 reproduces cmr_native exactly)
 Emits the pure_edge trade-log columns; `pct_return` is in R (1R = entry→stop risk).
 """
@@ -32,7 +34,7 @@ __all__ = ["simulate_rules"]
 def simulate_rules(df: pd.DataFrame, direction: str, is_equity: bool,
                    setup_mask: pd.Series, trigger_mask: pd.Series,
                    stop_spec: Dict[str, Any], exit_spec: Dict[str, Any],
-                   entry_fill: str = 'next_open',
+                   entry_fill: str = 'next_open', entry_delay: int = 0,
                    symbol: str = '', asset_class: str = 'Unknown',
                    cost_r: float = 0.0) -> pd.DataFrame:
     """Run one direction of a rules strategy over `df` → per-trade R-multiple log."""
@@ -57,20 +59,29 @@ def simulate_rules(df: pd.DataFrame, direction: str, is_equity: bool,
         if not (trig[i] and setup[i]):
             i += 1
             continue
-        setup_close = rows[i]['Close']
         atr_i = rows[i].get('ATR', 0.0)
 
         # ── entry fill ───────────────────────────────────────────────────────
+        # entry_delay shifts the fill this many bars later (latency / adverse
+        # execution). delay=0 reproduces the historical fill exactly.
+        fill_bar = (i + entry_delay) if entry_fill == 'close' else (i + 1 + entry_delay)
+        if fill_bar >= n:          # no bar left to fill on (ran off the end), no trade
+            i += 1
+            continue
         if entry_fill == 'close':
-            entry, entry_bar = setup_close, i
+            entry, entry_bar = rows[fill_bar]['Close'], fill_bar
         else:
-            entry, entry_bar = rows[i + 1]['Open'], i + 1
+            entry, entry_bar = rows[fill_bar]['Open'], fill_bar
+        # The exit scan starts on the first bar the position is exposed: the entry
+        # bar itself for a next-open fill (in at its open), the following bar for a
+        # close fill (entered at its close). At delay 0 this equals the old `i + 1`.
+        exit_start = entry_bar + 1 if entry_fill == 'close' else entry_bar
 
         # ── stop level + risk ────────────────────────────────────────────────
         # Risk is the ACTUAL entry-to-stop distance. With entry_fill='next_open'
         # the fill can gap away from the signal close, so measuring risk from the
         # setup close would mis-state the R-unit (a full stop-out must be −1R). For
-        # entry_fill='close' entry == setup_close, so this is unchanged.
+        # entry_fill='close' at delay 0, entry is the setup-bar close, so unchanged.
         if stop_mode == 'atr':
             if not (atr_i > 0):
                 i += 1
@@ -109,7 +120,7 @@ def simulate_rules(df: pd.DataFrame, direction: str, is_equity: bool,
 
         # ── exit loop ────────────────────────────────────────────────────────
         exit_price = exit_reason = None
-        j = i + 1
+        j = exit_start
         while j < n:
             bar = rows[j]
             held = j - entry_bar
