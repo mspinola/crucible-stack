@@ -5,7 +5,12 @@ import numpy as np
 import pytest
 
 from crucible_stack.orchestrate import (
-    DriftTrigger, ScheduleTrigger, Trigger, TriggerContext, TriggerDecision, any_of,
+    DriftTrigger,
+    ScheduleTrigger,
+    Trigger,
+    TriggerContext,
+    TriggerDecision,
+    any_of,
     envelope_from_r,
 )
 
@@ -117,6 +122,7 @@ def test_triggers_know_nothing_about_the_substrate():
     *discuss* cron and workflow engines without tripping the guard.
     """
     import ast
+
     import crucible_stack.orchestrate.trigger as mod
 
     imported = set()

@@ -10,8 +10,8 @@ It is downstream of crucible's gauntlet: you only size an edge that already pass
 package owns the `EquityResult` seam (capital sim → orchestrator); crucible never imports
 it. See docs/design/seam-contracts.md (Seam 3).
 """
-from crucible_stack.capital.equity import EquityResult, EquityStats, simulate_equity
 from crucible_stack.capital.bands import EquityBands, equity_bands
+from crucible_stack.capital.equity import EquityResult, EquityStats, simulate_equity
 
 __all__ = ["EquityResult", "EquityStats", "simulate_equity",
            "EquityBands", "equity_bands"]

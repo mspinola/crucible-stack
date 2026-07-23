@@ -28,7 +28,7 @@ verdict it exists to refresh. Blind-but-firing is loud; blind-but-quiet is not.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, Protocol, Sequence, Tuple, runtime_checkable
+from typing import Optional, Protocol, Tuple, runtime_checkable
 
 import numpy as np
 

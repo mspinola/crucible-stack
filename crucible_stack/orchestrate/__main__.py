@@ -114,7 +114,7 @@ def _report_status(args) -> int:
         print(f"  last decision: {last.action.upper()} on {last.timestamp:%Y-%m-%d} "
               f"via {last.trigger}")
     counts = {a: len(ledger.history(args.book, action=a)) for a in ("promote", "hold", "halt")}
-    print(f"  history: " + ", ".join(f"{k}={v}" for k, v in counts.items()))
+    print("  history: " + ", ".join(f"{k}={v}" for k, v in counts.items()))
     return EXIT_OK
 
 

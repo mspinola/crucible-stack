@@ -40,14 +40,13 @@ blind to the other markets and the scan manufactures a winner.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Mapping, Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
-
 from crucible.edge import reality_check
 from crucible.edge.stats import Verdict
-from crucible.validation import pbo_cscv, spa_test, Thresholds
+from crucible.validation import Thresholds, pbo_cscv, spa_test
 from crucible.validation.pbo import deflated_sharpe
 
 from crucible_stack.optimize.trial_matrix import TrialMatrix

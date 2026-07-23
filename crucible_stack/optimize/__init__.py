@@ -8,9 +8,9 @@ seam (the optimizer -> crucible contract); crucible never imports it — it cons
 
 See docs/design/seam-contracts.md (Seam 1) and docs/adr/ADR-0001 for the design.
 """
-from crucible_stack.optimize.trial_matrix import TrialMatrix
-from crucible_stack.optimize.sweep import sweep
-from crucible_stack.optimize.select import select, Selection
+from crucible_stack.optimize.select import Selection, select
 from crucible_stack.optimize.simulators import rules_simulator
+from crucible_stack.optimize.sweep import sweep
+from crucible_stack.optimize.trial_matrix import TrialMatrix
 
 __all__ = ["TrialMatrix", "sweep", "select", "Selection", "rules_simulator"]

@@ -7,10 +7,9 @@ place the 1R<->currency denominator lives.
 import numpy as np
 import pandas as pd
 import pytest
-
 from crucible.edge import TradeLog
 
-from crucible_stack.capital import EquityResult, EquityStats, simulate_equity
+from crucible_stack.capital import EquityResult, simulate_equity
 
 
 def _log(r, *, freq="10D", hold_days=6, start="2015-01-05"):

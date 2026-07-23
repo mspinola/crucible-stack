@@ -12,10 +12,9 @@ chain, which the seam and the sweep core do not need).
 """
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Mapping, Optional, Tuple
+from typing import Any, Callable, Mapping, Optional, Tuple
 
 import pandas as pd
-
 from crucible.edge import TradeLog
 
 
@@ -44,7 +43,9 @@ def rules_simulator(
     if spec_fn is None and (stop_spec is None or exit_spec is None):
         raise ValueError("provide either spec_fn or both stop_spec and exit_spec")
 
-    from crucible_stack.engine.simulator import simulate_rules   # lazy: keep crucible_stack.optimize core-free
+    from crucible_stack.engine.simulator import (
+        simulate_rules,  # lazy: keep crucible_stack.optimize core-free
+    )
 
     def sim(prices: pd.DataFrame, entries: pd.Series, side, config: dict):
         ss, es = spec_fn(config) if spec_fn is not None else (stop_spec, exit_spec)

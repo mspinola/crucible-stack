@@ -31,14 +31,16 @@ from __future__ import annotations
 from typing import Mapping, Optional, Sequence
 
 import numpy as np
-import pandas as pd
-
 from crucible.edge import TradeLog
 
-from crucible_stack.orchestrate.drift import (
-    DEFAULT_LEVELS, DriftEnvelope, DriftVerdict, check_drift, envelope_from_r,
-)
 from crucible_stack.framework.montecarlo import monthly_returns
+from crucible_stack.orchestrate.drift import (
+    DEFAULT_LEVELS,
+    DriftEnvelope,
+    DriftVerdict,
+    check_drift,
+    envelope_from_r,
+)
 
 __all__ = ["MONTHLY", "monthly_r", "provision_envelope", "check_account_drift", "in_currency"]
 

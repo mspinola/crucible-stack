@@ -66,7 +66,6 @@ def test_no_module_imports_a_strategy_or_a_data_store(path):
 
 @pytest.mark.parametrize("path", _modules(), ids=lambda p: str(p.relative_to(PKG)))
 def test_no_module_grows_an_undeclared_dependency(path):
-    import sysconfig
     stdlib = set(sys.stdlib_module_names)
     for name in _imports(path):
         root = name.split(".")[0]

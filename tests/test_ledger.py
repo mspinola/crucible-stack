@@ -1,14 +1,17 @@
 """ledger — Seam 4. The audit trail, so its guarantees are the point, not its convenience."""
 import ast
 import inspect
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
 import pytest
 
 from crucible_stack.orchestrate import (
-    DeploymentEntry, DeploymentLedger, check_drift, envelope_from_r,
+    DeploymentEntry,
+    DeploymentLedger,
+    check_drift,
+    envelope_from_r,
 )
 
 

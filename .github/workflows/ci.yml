@@ -32,7 +32,7 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Run linting
-        run: python -m ruff check src tests
+        run: python -m ruff check crucible_stack tests
 
       - name: Run tests
         # No COTDATA_STORE, and no strategy repo on the path. The boundary tests assert

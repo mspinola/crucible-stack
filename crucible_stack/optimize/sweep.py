@@ -22,7 +22,6 @@ import itertools
 from typing import Callable, Mapping, Optional, Sequence
 
 import pandas as pd
-
 from crucible.edge import barrier_trades
 from crucible.validation import SearchSpaceLog
 
