@@ -11,8 +11,6 @@ Sharing one `SearchSpaceLog` across the sweeps is what makes the denominator hon
 """
 import numpy as np
 import pandas as pd
-import pytest
-
 from crucible.strategies import ma_cross
 from crucible.validation import SearchSpaceLog
 

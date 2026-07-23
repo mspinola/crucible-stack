@@ -28,7 +28,6 @@ from typing import Mapping, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-
 from crucible.edge import TradeLog
 from crucible.validation import SearchSpaceLog
 

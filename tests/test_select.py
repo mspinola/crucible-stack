@@ -1,11 +1,10 @@
 """select — pick the honest winner from a TrialMatrix and gate it."""
 import numpy as np
 import pandas as pd
-
 from crucible.strategies import ma_cross
 from crucible.validation import Thresholds
 
-from crucible_stack.optimize import sweep, select, Selection
+from crucible_stack.optimize import Selection, select, sweep
 
 
 def _ohlc(n=520, seed=1):

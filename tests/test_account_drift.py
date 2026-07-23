@@ -7,12 +7,15 @@ rather than silently answered.
 import numpy as np
 import pandas as pd
 import pytest
-
 from crucible.edge import TradeLog
 
 from crucible_stack.orchestrate import (
-    DriftVerdict, build_envelope, check_account_drift, envelope_from_r, in_currency,
-    monthly_r, provision_envelope,
+    DriftVerdict,
+    check_account_drift,
+    envelope_from_r,
+    in_currency,
+    monthly_r,
+    provision_envelope,
 )
 
 

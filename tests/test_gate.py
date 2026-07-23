@@ -8,10 +8,9 @@ from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
-
 from crucible.strategies import ma_cross
 
-from crucible_stack.optimize import sweep, select, Selection
+from crucible_stack.optimize import Selection, select, sweep
 from crucible_stack.orchestrate import GateDecision, evaluate, is_promotable
 
 

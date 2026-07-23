@@ -2,10 +2,9 @@
 import numpy as np
 import pandas as pd
 import pytest
-
+from crucible.edge import TradeLog
 from crucible.validation import SearchSpaceLog, pbo_cscv
 from crucible.validation.pbo import deflated_sharpe
-from crucible.edge import TradeLog
 
 from crucible_stack.optimize import TrialMatrix
 

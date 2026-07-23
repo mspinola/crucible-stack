@@ -2,13 +2,12 @@
 import numpy as np
 import pandas as pd
 import pytest
-
-from crucible.strategies import ma_cross
 from crucible.edge import barrier_trades
+from crucible.strategies import ma_cross
 from crucible.validation import pbo_cscv
 from crucible.validation.pbo import deflated_sharpe
 
-from crucible_stack.optimize import sweep, TrialMatrix
+from crucible_stack.optimize import TrialMatrix, sweep
 
 
 def _ohlc(n=520, seed=1):
@@ -99,6 +98,7 @@ def test_custom_simulator_hook_is_used_per_config():
 
 def test_rules_simulator_requires_specs():
     import pytest
+
     from crucible_stack.optimize import rules_simulator
     with pytest.raises(ValueError, match="spec_fn or both"):
         rules_simulator(is_equity=False)                     # neither specs nor spec_fn

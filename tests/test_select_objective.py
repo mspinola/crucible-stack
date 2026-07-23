@@ -12,7 +12,6 @@ metric it corrected against stop being like-for-like.
 import numpy as np
 import pandas as pd
 import pytest
-
 from crucible.edge import TradeLog
 from crucible.strategies import ma_cross
 from crucible.validation import SearchSpaceLog
@@ -116,7 +115,6 @@ def test_the_spa_gate_decides_trustworthiness_for_a_mean_objective():
 
 def test_expectancy_corrects_on_per_trade_R_not_per_period():
     """The statistic selected on is per-TRADE, so that is the series SPA must see."""
-    import inspect
     from crucible_stack.optimize.select import OBJECTIVES, _per_trade_series
     assert OBJECTIVES["expectancy"]["spa"] is _per_trade_series
     tm = _handmade()

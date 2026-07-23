@@ -10,7 +10,11 @@ import numpy as np
 import pytest
 
 from crucible_stack.orchestrate import (
-    DriftEnvelope, DriftVerdict, build_envelope, check_drift, envelope_from_r,
+    DriftEnvelope,
+    DriftVerdict,
+    build_envelope,
+    check_drift,
+    envelope_from_r,
 )
 
 

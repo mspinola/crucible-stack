@@ -18,13 +18,13 @@ Emits the pure_edge trade-log columns; `pct_return` is in R (1R = entry→stop r
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import numpy as np
 import pandas as pd
 
-from crucible_stack.framework.strategy import TRADE_LOG_COLUMNS
 from crucible_stack.engine.exits import ATR_STOP_MULT, DEFAULT_EXIT_MODE, get_exit
+from crucible_stack.framework.strategy import TRADE_LOG_COLUMNS
 
 __all__ = ["simulate_rules"]
 
@@ -127,14 +127,18 @@ def simulate_rules(df: pd.DataFrame, direction: str, is_equity: bool,
             if hard_r is not None:
                 hlv = entry - hard_r * risk if side > 0 else entry + hard_r * risk
                 if side > 0 and bar['Low'] <= hlv:
-                    exit_price, exit_reason = min(hlv, bar['Open']), 'hard'; break
+                    exit_price, exit_reason = min(hlv, bar['Open']), 'hard'
+                    break
                 if side < 0 and bar['High'] >= hlv:
-                    exit_price, exit_reason = max(hlv, bar['Open']), 'hard'; break
+                    exit_price, exit_reason = max(hlv, bar['Open']), 'hard'
+                    break
             # close-based stop breach (shared by both exit modes)
             if side > 0 and bar['Close'] < stop:
-                exit_price, exit_reason = bar['Close'], 'stop'; break
+                exit_price, exit_reason = bar['Close'], 'stop'
+                break
             if side < 0 and bar['Close'] > stop:
-                exit_price, exit_reason = bar['Close'], 'stop'; break
+                exit_price, exit_reason = bar['Close'], 'stop'
+                break
 
             # The exit rule runs exactly where the if/elif chain used to: after the
             # hard/close stop checks, before the trailing-stop ratchet. It may update

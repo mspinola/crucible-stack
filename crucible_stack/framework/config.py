@@ -1,5 +1,6 @@
+from typing import Any, Dict, List, Literal, Optional, Type
+
 import yaml
-from typing import List, Dict, Optional, Literal, Any, Type
 from pydantic import BaseModel, Field, ValidationError
 
 __all__ = ["MasterConfig", "load_config", "MetaConfig", "ExecutionConfig", "DataConfig",
@@ -19,7 +20,7 @@ class MetaConfig(BaseModel):
     version: str
 
 class ExecutionConfig(BaseModel):
-    engine: Literal["native", "realtest"] 
+    engine: Literal["native", "realtest"]
     initial_capital: float
     commission_per_trade: float = 0.0
     slippage_ticks: int = 0

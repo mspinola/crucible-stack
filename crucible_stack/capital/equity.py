@@ -21,7 +21,6 @@ from typing import Mapping, Optional, Sequence
 
 import numpy as np
 import pandas as pd
-
 from crucible.edge import TradeLog
 
 __all__ = ["EquityStats", "EquityResult", "simulate_equity"]

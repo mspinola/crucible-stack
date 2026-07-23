@@ -24,12 +24,13 @@ from typing import Mapping, Optional, Sequence
 
 import numpy as np
 import pandas as pd
-
 from crucible.edge import TradeLog
 
 from crucible_stack.capital.equity import EquityResult, simulate_equity
 from crucible_stack.framework.montecarlo import (
-    block_bootstrap_paths, monthly_returns, weighted_monthly_returns,
+    block_bootstrap_paths,
+    monthly_returns,
+    weighted_monthly_returns,
 )
 
 __all__ = ["EquityBands", "equity_bands"]
