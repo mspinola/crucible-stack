@@ -4,12 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "crucible-stack"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "A framework for defining, searching, sizing and deploying trading strategies. Strategies not included."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [{name = "Matt Spinola"}]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
 dependencies = [
     "numpy>=2.0",
     "pandas>=2.0",
@@ -32,6 +39,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.1.0"]
+
+[project.urls]
+Homepage = "https://github.com/mspinola/crucible-stack"
+Source = "https://github.com/mspinola/crucible-stack"
 
 [tool.setuptools.packages.find]
 include = ["crucible_stack*"]
