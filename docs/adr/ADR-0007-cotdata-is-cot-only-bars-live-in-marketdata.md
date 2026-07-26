@@ -27,7 +27,8 @@ Four measurements taken while scoping, all of which shrink the problem:
    reference a price module. Nothing needs untangling. Files move.
 3. **The registry is effectively private.** It is exported in `__all__`, but no consumer across
    `cotmetrics`, `cot-analyzer`, `npf` or `livebook` imports it. Consumers touch only `get_prices`
-   (27 call sites), `config` (7), `get_cot` (6), `schema_version` (2) and `store` (1).
+   (27 call sites), `config` (7), `get_cot` (6), `schema_version` (2) and `store` (1, which is
+   `read_metadata`, see the contract-specs section below).
 4. **Almost nothing joins the domains.** Exactly two files read both prices and COT.
 
 There is also a platform boundary living inside the package and invisible from outside it. The CFTC
@@ -37,6 +38,25 @@ download is free and runs on any OS. The Norgate producer runs only on Windows.
 
 **`cotdata` keeps CFTC positioning data and nothing else. All bar data, every instrument domain and
 every vendor, moves to one sibling package: `marketdata`.**
+
+### Contract specs move with the producer, not with the COT
+
+Amended 2026-07-26. The original text said only that "all bar data" moves, which left a third
+output unaccounted for.
+
+The Norgate producer writes **two** things, not one. Alongside the bars it writes contract specs
+(Name, Exchange, Group, Contract Size, Tick Size, Tick Value, Point Value, Currency, Margin) into
+`metadata/contract_specs.parquet`, behind its own `--metadata` CLI flag. Norgate is the sole
+producer of that table. No other provider writes it.
+
+Contract specs are neither COT nor bars, so the original wording did not place them. They move to
+`marketdata` for two reasons. By this ADR's own rule `cotdata` keeps CFTC positioning **and nothing
+else**, and a tick value is not CFTC positioning. And splitting the producer in half would leave
+two packages both importing `norgatedata` and both requiring the Windows host, which is precisely
+the coupling this split exists to remove. One vendor integration, one home.
+
+`metadata/` therefore becomes a `marketdata` store domain, and `--metadata` becomes a `marketdata`
+CLI flag.
 
 ### Vendors are providers, never packages
 
@@ -101,9 +121,13 @@ $MARKETDATA_STORE/
   bars/futures/databento/ES_backadj.parquet
   bars/equities/yfinance/SPY.parquet
   bars/equities/norgate/SPY.parquet
+  metadata/contract_specs.parquet
   _raw/databento/ingest_manifest.json
   manifest.json
 ```
+
+`metadata/` sits outside `bars/` because it is one table keyed by symbol rather than one file per
+symbol, which is also why a scoped refresh must upsert rather than replace.
 
 Two vendors that both carry a symbol would otherwise write one file and the producer that ran last
 would silently win. On equities the overlap is total rather than incidental, and the vendors do not
@@ -128,6 +152,19 @@ therefore live under one synced parent folder, so there stays one thing to back 
 live weekday-morning job against an append-only ledger. `cotdata` is published on PyPI, so the price
 API needs a re-export shim and a deprecation window rather than a clean cut. Every launcher gains a
 second store variable until the roots converge.
+
+The shim covers **two** symbols, not one. `read_metadata` moves with the contract specs, and its
+blast radius is different from the bars migration:
+
+| Symbol | Consumers |
+|---|---|
+| `get_prices` | `cotmetrics` (and `cot-analyzer` transitively), `npf`, `livebook` |
+| `read_metadata` | `npf/src/npf/validation/costs.py:34`, and `livebook/bin/flatten.py` via it |
+
+`costs.py` uses Point Value and Tick Value to convert R-multiples into dollar costs, and degrades to
+zero costs with a warning when the table is unavailable. That fallback is a hazard during migration:
+a broken import produces a silently cost-free backtest rather than an error, so the specs move needs
+a positive assertion that the table loaded, not just a green test run.
 
 **What it buys.** A package whose name describes what it does. A cross-platform COT downloader with
 no Windows-only dependency in its tree. One bar package where a lesson learned on one domain applies
@@ -157,8 +194,11 @@ Extract in the ADR-0004 style, so the disruptive step is decoupled from the desi
 1. Make the seam explicit **inside** `cotdata`: separate store domains, separate manifests, separate
    CLI entry points.
 2. Move the price half into `marketdata` as the `futures` domain, beside the `equities` domain
-   already built. With step 1 done this is a file move plus a shim.
-3. Migrate consumers one repo at a time behind the shim, `livebook` last.
+   already built, taking the contract-specs table and its `--metadata` flag with it. With step 1
+   done this is a file move plus a shim.
+3. Migrate consumers one repo at a time behind the shim, `livebook` last. Before touching
+   `costs.py`, give it a positive assertion that the specs table loaded, so the migration cannot
+   pass silently on zero costs.
 4. Remove the shim after a deprecation window. Optionally converge both packages on one store root.
 
 Step 1 delivers most of the clarity at a fraction of the risk and is worth doing on its own.
