@@ -71,6 +71,15 @@ PATTERNS = {
 # falsifying the record rather than protecting anything.
 EXCLUDED_DIRS = ("docs/adr/",)
 
+# The roots holding this repo's own prose, plus top-level markdown. An allowlist rather
+# than a list of things to skip: a local `.venv/` (or `build/`, `.tox/`, an unpacked
+# wheel) inside the checkout carries thousands of vendored files whose prose is not ours
+# to police, and every one of them was scanned until this was narrowed. A skip list has
+# to be extended each time a new such directory appears, and it fails open when nobody
+# remembers to. This fails closed: a new source root has to be named here to be guarded,
+# and `test_there_is_something_to_check` notices if one is renamed away.
+SCANNED_ROOTS = ("crucible_stack", "tests", "docs")
+
 # Deliberate exceptions. Each one must say WHY, because an undocumented exception is
 # indistinguishable from a leak someone silenced.
 ALLOWED = {
@@ -103,10 +112,13 @@ def _prose(path: pathlib.Path) -> str:
 
 
 def _files():
+    candidates = list(ROOT.glob("*.md")) + list(ROOT.glob("*.py"))
+    for root in SCANNED_ROOTS:
+        candidates += list((ROOT / root).rglob("*.md")) + list((ROOT / root).rglob("*.py"))
     out = []
-    for p in sorted(list(ROOT.rglob("*.md")) + list(ROOT.rglob("*.py"))):
+    for p in sorted(set(candidates)):
         rel = p.relative_to(ROOT).as_posix()
-        if ".git/" in rel or rel.startswith(EXCLUDED_DIRS) or rel in ALLOWED:
+        if rel.startswith(EXCLUDED_DIRS) or rel in ALLOWED:
             continue
         out.append(p)
     return out
@@ -114,10 +126,15 @@ def _files():
 
 def test_there_is_something_to_check():
     """A scanner that stops finding files passes forever."""
+    for root in SCANNED_ROOTS:
+        assert (ROOT / root).is_dir(), \
+            f"SCANNED_ROOTS names {root}/, which is not a directory: the guard is blind to it"
     files = _files()
     assert len(files) >= 25, f"prose guard stopped seeing the repo: {len(files)} files"
     assert any(f.suffix == ".md" for f in files), "no markdown in scope"
     assert any(f.suffix == ".py" for f in files), "no python in scope"
+    for root in SCANNED_ROOTS:
+        assert any(f.is_relative_to(ROOT / root) for f in files), f"nothing in scope under {root}/"
 
 
 @pytest.mark.parametrize("path", _files(), ids=lambda p: p.relative_to(ROOT).as_posix())
