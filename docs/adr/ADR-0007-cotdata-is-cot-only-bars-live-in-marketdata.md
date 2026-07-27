@@ -5,8 +5,14 @@
 > a new `marketdata` sibling, and four consumers. Unlike ADR-0006 it **does** change a consumer
 > read contract, which is most of its cost.
 
-**Status:** Proposed (2026-07-25)
-**Date:** 2026-07-25
+**Status:** Accepted (2026-07-27). The direction is settled: `cotdata` becomes COT-only and all
+bar data lives in `marketdata`. Accepted with **step 1 shipped and steps 2 to 4 outstanding**,
+which is a deliberate distinction from ADR-0006. That one was accepted after its architecture was
+implemented and validated end to end. This one is accepted as a direction, on the strength of step
+1 landing cleanly and of `marketdata` proving the receiving design in production. The disruptive
+move has not happened, so acceptance here authorises the remaining steps rather than recording
+them.
+**Date:** 2026-07-25 (accepted 2026-07-27)
 **Deciders:** Matt (sole maintainer)
 
 ## Context
@@ -191,29 +197,60 @@ recreate the coupling this ADR removes.
 
 Extract in the ADR-0004 style, so the disruptive step is decoupled from the design decision.
 
-1. Make the seam explicit **inside** `cotdata`: separate store domains, separate manifests, separate
-   CLI entry points.
+1. **DONE (2026-07-26).** Make the seam explicit **inside** `cotdata`: separate store domains,
+   separate manifests, separate CLI entry points.
 2. Move the price half into `marketdata` as the `futures` domain, beside the `equities` domain
    already built, taking the contract-specs table and its `--metadata` flag with it. With step 1
    done this is a file move plus a shim.
 3. Migrate consumers one repo at a time behind the shim, `livebook` last. Before touching
    `costs.py`, give it a positive assertion that the specs table loaded, so the migration cannot
-   pass silently on zero costs.
+   pass silently on zero costs. **The npf half of that guard is built** (npf#159).
 4. Remove the shim after a deprecation window. Optionally converge both packages on one store root.
 
-Step 1 delivers most of the clarity at a fraction of the risk and is worth doing on its own.
+Step 1 delivers most of the clarity at a fraction of the risk and is worth doing on its own. That
+prediction held: it landed without touching a single consumer read.
 
 ## Status of the work
 
+Updated 2026-07-27.
+
+**Step 1 is complete.** `cotdata` PRs #55 (the seam), #56 (wrappers call the half-scoped entry
+points), #59 (stop writing the legacy manifest, plus a one-shot migration) and #61 (`--check`
+measures lag on write time). The live store now carries `manifests/cot.json` and
+`manifests/prices.json` with the legacy `manifest.json` deleted, the domains are split
+(`prices/` against `cot_legacy/`, `cot_disagg/`, `cot_tff/`, `metadata/`), and `cotdata-cot` and
+`cotdata-prices` ship beside `cotdata-update`.
+
+**Step 3's prerequisite is half built.** `npf.validation.costs.assert_specs_available` raises
+rather than charging zero when the specs table cannot price what is being traded, and its loader is
+source-agnostic so it names which package served the table and flags any other that also could:
+mid-migration both can, and silently taking the first is how a stale table goes unnoticed.
+`livebook` is NOT covered. It calls `contract_specs()` in six places at the default
+`required=False`, so it would degrade to an empty frame and keep running. That is a live book and
+the change is deliberately deferred.
+
+**Step 2 has not started.** `prices.py` still lives in `cotdata`. What moves is roughly 1,700
+lines: `providers/databento.py` (1015), `providers/norgate.py` (469), `prices.py` (167),
+`providers/yfinance.py` (70), plus `metadata/contract_specs.parquet` and `--metadata`.
 `marketdata` exists with the `equities` domain, the yfinance provider, the three-tier adjustment
-derived on read, and a pin test reproducing the vendor's own adjusted column. The `futures` domain
-is declared in the adjustment map so error messages are correct from the first day, but has no
-provider yet. Nothing in `cotdata` has moved.
+derived on read, a pin test reproducing the vendor's own adjusted column, and a manifest-level
+`universe_is_point_in_time` flag. The `futures` domain is declared in `adjust.DOMAIN_TIERS` so
+error messages are correct from the first day, but has no provider yet.
+
+`databento.py` arriving after this ADR was written makes `cotdata` *more* price-heavy than the
+measurements above, which strengthens the case and enlarges step 2 at the same time.
 
 ## Open questions
 
-- Whether the two packages converge on a single store root env var, and when.
-- Whether the futures `propadj` tier stays derived-on-read as it is today.
+- Whether the two packages converge on a single store root env var, and when. Both are now set
+  from the shell profile (`COTDATA_STORE`, `MARKETDATA_STORE`), and neither is set by any launcher,
+  so converging is still cheap.
+- Whether the futures `propadj` tier stays derived-on-read as it is today. **Evidence arrived
+  2026-07-27.** The month-end Treasury seasonal read futures through `cotdata.get_prices` and its
+  first run was VOIDED because `backadj` percent returns sign-inverted 15 of ZB's 100 trades:
+  additive back-adjustment can cross zero. Moving to `propadj` fixed it, so `propadj` is not a
+  nicety, it decided a verdict. `marketdata` derives every tier on read, which is the behaviour
+  that turned out to matter.
 - Whether the Linux server runs the `marketdata` futures producer itself after step 2, or keeps
   receiving a synced store. databento is not currently declared in `cot-analyzer`'s own
   requirements, so that wiring is unfinished either way.
