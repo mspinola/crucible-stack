@@ -5,8 +5,10 @@
 > stack reads through, but every code change lands in `cotdata` and two of its consumers
 > (`cotmetrics`, `cot-analyzer`). It changes **no** consumer read contract.
 
-**Status:** Proposed (2026-07-23)
-**Date:** 2026-07-23
+**Status:** Accepted (2026-07-27). Architecture implemented and validated (see Outcome). The
+server's deployment landed differently than the original motivation: it keeps the Norgate
+sync, and databento is a validated alternative provider rather than the server's source.
+**Date:** 2026-07-23 (accepted 2026-07-27)
 **Deciders:** Matt (sole maintainer)
 
 ## Context
@@ -201,23 +203,56 @@ about once a quarter.
    Verified end-to-end through `get_prices` (5 tests) and on a live ES/CL/GC ingest+build (65/80/235
    rolls; offset piecewise-constant stepping exactly on roll days; daily changes preserved off-seam;
    newest segment anchored to real prices; no non-positive closes). cotdata 110 tests green.
-5. **yfinance coverage. — DONE (2026-07-23).** Added Yahoo continuous tickers for the ICE softs
-   (SB/CT/CC/KC/OJ) and lumber (LBR, symbol unverified) in `registry.yaml`. No `price_source`
+5. **yfinance coverage. — DONE (2026-07-23; lumber ticker corrected 2026-07-27).** Added Yahoo
+   continuous tickers for the ICE softs (SB/CT/CC/KC/OJ) and lumber in `registry.yaml`. Lumber is
+   `LBR=F` (the current CME physical contract, verified live); the originally-recorded `LBS=F` was
+   the delisted random-length contract, dark since 2023-05. DX (ICE US Dollar Index, not on
+   GLBX.MDP3) was also set `databento: null` with `yahoo: DX-Y.NYB`. No `price_source`
    override is used: they keep `databento: null`, so capability alone resolves them to yfinance on
    a databento deployment while they stay on Norgate locally. The yfinance producer now filters its
    targets by `resolve_source(sym, default_price_source())`, so it never overwrites Norgate's softs
    on a local box.
-6. **Validation harness. — SCAFFOLDED (2026-07-23), awaiting a real-data run.**
-   `scripts/validate_databento_vs_norgate.py` reads `backadj` for ES/CL/GC from a Norgate-built
-   and a databento-built store and reports the shape match. The invariant is matching daily
-   *changes* (additive back-adjustment preserves changes, not percent returns, since a floating
-   anchor moves the level), plus a scale-ratio check and roll-date agreement; levels may
-   legitimately differ by a per-segment offset. It exits non-zero outside tolerance so it can gate
-   promotion. The comparison logic is unit tested against synthetic frames (6 tests); the real run
-   needs a databento-built store (DATABENTO_API_KEY) plus the Norgate store, so it is yours to run.
+6. **Validation harness. — DONE (2026-07-27).** Run against a full databento-built store versus
+   the Norgate store. Result in `cotdata/docs/databento_norgate_parity.md`: of 40 databento
+   symbols, 14 match Norgate cleanly, SI/HG/6J were a pure unit convention reconciled with a
+   build-stage scale, and the monthly-roll commodities and livestock differ because the two
+   providers roll their continuous series on different calendars. A follow-up roll-rule
+   investigation (`scripts/investigate_databento_roll_rule.py`) found the roll rule is per-symbol,
+   not global (energy `.c`, grains `.v`, quarterly `.n`). See the Outcome section for the
+   disposition.
 7. **CLI + dispatch + docs. — DONE (2026-07-23).** Added `cotdata-update --ingest-databento`
    and `--build-databento` to `update.py`. Producer dispatch is by `resolve_source` /
    `default_price_source`: the yfinance and databento producers write only the symbols that
    resolve to them on the deployment and honor the `price_source` override. Documented the
    two-stage model, the raw store, and `COTDATA_PRICE_SOURCE` in the README (Providers &
    authentication) and the sources table. cotdata 103 tests green.
+
+## Outcome (2026-07-27)
+
+The architecture above (one provider per symbol, the two-stage `ingest` then `build` producer,
+additive back-adjustment from databento's own continuous series) was implemented in full and
+validated against Norgate. It works. databento produces internally-consistent back-adjusted
+series through the unchanged consumer contract, and the whole toolchain runs on it end to end.
+
+**Validation result** (see `cotdata/docs/databento_norgate_parity.md`). Of 40 databento-built
+symbols, 14 match Norgate cleanly. SI, HG, and 6J were a pure unit convention (Norgate quotes
+silver and copper in cents and JPY in the IMM x100 form), reconciled with a build-stage price
+scale. The monthly-roll commodities and livestock differ because databento and Norgate roll
+their continuous series on different calendars. A follow-up investigation
+(`scripts/investigate_databento_roll_rule.py`) showed the right roll rule is per-symbol, not
+global. Energy (CL, NG) tracks Norgate on databento's calendar roll `.c` (near-perfect). Grains
+(ZS, ZC) track best on the volume roll `.v` (better than the default `.n`, but loose, a few days
+off each roll, so about 0.95 not 0.999). The quarterly financials and metals already match on
+the open-interest roll `.n`.
+
+**Deployment decision.** The server will NOT source databento. It keeps sourcing Norgate via a
+Windows-to-Linux store sync, the rsync link this ADR originally hoped to drop. Rationale: the
+sync is risk-free (the dashboard then shows exactly what local research shows, the same Norgate
+data) and lower maintenance than carrying a per-symbol roll-rule table plus a grain series that
+never quite matches. The per-symbol roll rule is documented but intentionally not built.
+
+**Disposition.** The one-provider-per-symbol architecture and the databento producer are Accepted
+and merged. databento stands as an available, validated ALTERNATIVE provider that produces
+provider-different (not Norgate-identical) series, the expected behavior when changing data
+vendors. It is not positioned as a Norgate drop-in for the server. The raw databento bronze store
+is kept so the capability can be picked up again later without re-paying the backfill.
