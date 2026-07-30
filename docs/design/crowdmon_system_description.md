@@ -429,9 +429,8 @@ See `crowdmon_futures_cot_module.md` (in the `cotdata` repo, under `docs/design/
 > point-in-time `asof(t)` reads, and release dates with explicit provenance. It lives in
 > `cotdata` (branch `claude/cot-revision-snapshots-9b196f`,
 > [PR #78](https://github.com/mspinola/cotdata/pull/78)); the scope and persistence decision
-> is [ADR-0008](../adr/ADR-0008-cot-vintage-provenance-in-parquet.md), which arrives with
-> [crucible-stack PR #13](https://github.com/mspinola/crucible-stack/pull/13) — so that link
-> dangles on `main` until it merges.
+> is [ADR-0008](../adr/ADR-0008-cot-vintage-provenance-in-parquet.md), which ships in this
+> same PR.
 >
 > Two outcomes bear directly on the shared components below:
 >
