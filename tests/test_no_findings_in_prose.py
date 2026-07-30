@@ -95,6 +95,11 @@ ALLOWED = {
     "tests/test_no_findings_in_prose.py":
         "is this guard. Its patterns and its regression corpus must contain the exact "
         "strings it exists to catch, including the real leaks replayed below.",
+    "docs/design/crowdmon_system_description.md":
+        "names the $100M statutory 13F filing threshold, a public SEC reporting rule that "
+        "bounds what ownership data can observe at all. It is a regulatory constant, not an "
+        "account size or a result, and the coverage-limits section depends on stating it to "
+        "explain which holders are structurally invisible to the system.",
 }
 
 
