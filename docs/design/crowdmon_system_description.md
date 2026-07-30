@@ -422,7 +422,26 @@ Steps 2 and 4 are the two the earlier conversation identified as delivering most
 
 ## 12. Companion: futures / COT adapter
 
-See `crowdmon_futures_cot_module.md`.
+See `crowdmon_futures_cot_module.md` (in the `cotdata` repo, under `docs/design/`).
+
+> **Status 2026-07-30.** Step 1 of the futures adapter is built: as-published (vintage) COT
+> capture with change-only storage, field-level revisions carrying revision depth,
+> point-in-time `asof(t)` reads, and release dates with explicit provenance. It lives in
+> `cotdata` (branch `claude/cot-revision-snapshots-9b196f`,
+> [PR #78](https://github.com/mspinola/cotdata/pull/78)); the scope and persistence decision
+> is [ADR-0008](../adr/ADR-0008-cot-vintage-provenance-in-parquet.md), which arrives with
+> [crucible-stack PR #13](https://github.com/mspinola/crucible-stack/pull/13) — so that link
+> dangles on `main` until it merges.
+>
+> Two outcomes bear directly on the shared components below:
+>
+> - **No DuckDB.** The store is Parquet plus a JSON manifest. Change-only writes keep the
+>   entire vintage history in single-digit MB, and DuckDB can still query those files ad hoc
+>   without becoming the storage format. Read "the DuckDB/parquet store" below as Parquet.
+> - **Vintage history is forward-only.** CFTC serves current state only and git-history
+>   recovery returned nothing, so point-in-time protection begins at first capture and can
+>   never be backfilled. Any validation (§9) resting on as-of correctness over history that
+>   predates capture is permanently unavailable, not merely pending.
 
 **Current priority: the futures adapter is the primary build; this equity monitor is the follow-on.** COT resolves the four structural weaknesses of the 13F approach — it reports shorts explicitly, arrives weekly with a three-day lag, describes a zero-sum system where open interest is known exactly rather than estimated against float, and publishes trader counts and concentration ratios directly.
 
