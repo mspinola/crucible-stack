@@ -106,7 +106,7 @@ flowchart TB
 
 | Source | Content | Frequency | Lag | Cost |
 |---|---|---|---|---|
-| SEC EDGAR 13F-HR | US long equity holdings, managers >$100m | Quarterly | 45d | Free |
+| SEC EDGAR 13F-HR | US long equity holdings, managers above the 13F reporting threshold | Quarterly | 45d | Free |
 | OHLCV vendor | Price, volume, shares out | Daily | 1d | Free–low |
 | ETF holdings | Thematic basket membership | Daily | 1d | Free |
 | IBKR shortable file | Shares available, borrow fee | Daily | 1d | Free |
@@ -359,7 +359,7 @@ Stated prominently because every one of these can invert the conclusion.
 3. **Options.** Delta and gamma exposure, and dealer hedging flow, are not modelled in v0.1. Open interest and skew are candidates for v0.2.
 4. **Leverage.** 13F gives gross long holdings, not gross or net exposure. A manager cutting gross by half is invisible until the next filing.
 5. **Non-US positioning.** No 13F equivalent for Korea, Japan, Taiwan, or Europe. Retail margin balances (KOFIA, TWSE) are partial regional substitutes. For a theme like AI, this excludes a large fraction of the actual position.
-6. **Sub-threshold and non-filing holders.** Managers under $100m, family offices, sovereigns, and non-US filers.
+6. **Sub-threshold and non-filing holders.** Managers below the 13F reporting threshold, family offices, sovereigns, and non-US filers.
 7. **Intra-quarter dynamics.** A position opened and closed inside a quarter never appears at all.
 8. **Direction and timing.** The system describes the shape of the tail, not which way the next move goes. High readings can persist for quarters.
 9. **Causality.** Every metric is an association. A rising composite is consistent with crowding and also with a genuine sector-wide fundamental repricing.
