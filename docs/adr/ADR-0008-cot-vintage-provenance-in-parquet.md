@@ -6,13 +6,18 @@
 > to COT only, is *as-published provenance* for that COT data inside the narrowed boundary or
 > outside it. Code changes land entirely in `cotdata`; no consumer read contract changes.
 
-**Status:** Accepted (2026-07-30) as to the decision, with the implementation complete but
-**unmerged**: it lives on `cotdata` branch `claude/cot-revision-snapshots-9b196f`
-([PR #78](https://github.com/mspinola/cotdata/pull/78)) pending review. This is the ADR-0007
-distinction again, in the opposite direction: 0007 was accepted as a direction with most of the
-work outstanding, whereas here the work is done and only the merge is outstanding. Acceptance
-records the boundary interpretation, which is what future readers of ADR-0007 need, rather than
-authorising work still to come.
+**Status:** Accepted (2026-07-30), **implemented and merged**: landed in `cotdata` via
+[PR #78](https://github.com/mspinola/cotdata/pull/78). This is the ADR-0007 distinction in the
+opposite direction: 0007 was accepted as a *direction* with most of the work outstanding, whereas
+this one was accepted with the work already done, so acceptance records a boundary interpretation
+rather than authorising work still to come.
+
+What shipped: immutable raw capture, change-only bitemporal observations, field-level revisions
+with revision depth, point-in-time `asof(t)`, release dates carrying explicit provenance, and a
+closed-year restatement tripwire. What did not, and is scoped in "Open questions" below:
+futures-and-options-combined capture, disaggregated/TFF ingest canonicalisers, and revision
+analytics. **No production vintage has been captured yet** — the subsystem is merged but its
+scheduled task is not yet running, and the series begins at first capture.
 **Date:** 2026-07-30
 **Deciders:** Matt (sole maintainer)
 
