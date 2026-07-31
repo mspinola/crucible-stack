@@ -45,6 +45,13 @@ download is free and runs on any OS. The Norgate producer runs only on Windows.
 **`cotdata` keeps CFTC positioning data and nothing else. All bar data, every instrument domain and
 every vendor, moves to one sibling package: `marketdata`.**
 
+> **What "and nothing else" does not exclude.** The narrowing here is along the axis of *instrument
+> domain* (COT versus bars), not *derived versus raw*. [ADR-0008](ADR-0008-cot-vintage-provenance-in-parquet.md)
+> settles the first case to test that reading: as-published (vintage) provenance for the COT data
+> is **inside** this boundary, because it is CFTC-positioning provenance and it has to sit beside
+> the fetch it records. Read that ADR before concluding that a new `cotdata` subsystem contradicts
+> this one.
+
 ### Contract specs move with the producer, not with the COT
 
 Amended 2026-07-26. The original text said only that "all bar data" moves, which left a third
