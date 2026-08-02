@@ -64,13 +64,18 @@ PUBLIC_API = {
     },
     "crucible_stack.orchestrate": {
         "ACTIONS", "CycleResult", "DeploymentEntry", "DeploymentLedger", "DriftEnvelope",
-        "DriftTrigger", "DriftVerdict", "GateDecision", "Reoptimization", "ScheduleTrigger",
-        "Trigger", "TriggerContext", "TriggerDecision", "any_of", "build_envelope",
-        "check_account_drift", "check_drift", "envelope_from_r", "evaluate", "in_currency",
+        "DriftTrigger", "DriftVerdict", "EdgeDecayTrigger", "GateDecision", "Reoptimization",
+        "ScheduleTrigger", "Trigger", "TriggerContext", "TriggerDecision", "any_of",
+        "baseline_from_dict", "baseline_to_dict", "build_envelope", "check_account_drift",
+        "check_decay", "check_drift", "envelope_from_r", "evaluate", "in_currency",
         "is_promotable", "missed_windows", "monthly_r", "provision_envelope", "run_cycle",
     },
     "crucible_stack.orchestrate.account_drift": {
         "MONTHLY", "check_account_drift", "in_currency", "monthly_r", "provision_envelope",
+    },
+    "crucible_stack.orchestrate.decay": {
+        "EdgeBaseline", "MonitorVerdict", "Thresholds", "baseline_from_dict",
+        "baseline_to_dict", "check_decay",
     },
 }
 

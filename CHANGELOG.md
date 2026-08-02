@@ -7,6 +7,37 @@ breaking change are governed by [docs/api-stability.md](docs/api-stability.md).
 ## [Unreleased]
 
 ### Added
+- **`crucible_stack.orchestrate.decay` and `EdgeDecayTrigger`**: the parameter-space
+  counterpart to `drift`. `drift` watches the equity **path** (cumulative R and drawdown
+  against the frozen envelope); this watches the per-trade **parameter** (expectancy, and
+  how often the signal fires). They are complements and come apart in both directions: a
+  halved expectancy leaves the path flat and usually inside a p5 band provisioned over a
+  multi-year horizon, and a run of correlated losers breaches the drawdown floor with
+  every per-trade statistic intact. Running only one leaves a real failure invisible.
+
+  The judging is crucible's (`crucible.validation.monitor`). What this contributes is the
+  three things crucible refuses to own: freezing an `EdgeBaseline` at the moment of
+  promotion, persisting it in the `DeploymentLedger` beside the `DriftEnvelope`, and
+  turning a verdict into a re-optimization trigger. `DeploymentEntry` gains a `baseline`
+  field that round-trips through JSON, and a refusal carries none, matching the envelope
+  rule so there is never a reference a later cycle could re-baseline onto.
+
+  **Only DEGRADED fires.** crucible reserves that label for the CUSUM, the one channel
+  with a stated false-alarm rate. SLIPPING is reported in `reasons` and does not trigger.
+  Promoting an uncalibrated tripwire to a re-optimization trigger would undo the reason
+  crucible separates them, and would tax the honest N besides: every re-optimization is
+  variants added to the `SearchSpaceLog`.
+
+  `TriggerContext` gains `trade_r` (per-TRADE R since promotion) as a field separate from
+  `realized_r` (PERIODIC R, the grid the envelope was built on). Two different series with
+  two different lengths and two different clocks (`trades_live` vs `elapsed`); conflating
+  them is the units bug crucible fixed in v0.4.0. `run_cycle` gains an optional `trade_r`
+  argument, defaulting to empty, so existing callers are unaffected.
+
+  `trigger` depends on `decay.check_decay` rather than on crucible directly, exactly as it
+  depends on `drift.check_drift`, which keeps the trigger seam's import surface to
+  crucible_stack + numpy as `test_triggers_know_nothing_about_the_substrate` pins.
+
 - **`tests/test_no_findings_in_prose.py`**, a guard on the writing rather than the code.
   The boundary guard reads the syntax tree, so it cannot see a docstring or a markdown
   file, and every leak found while extracting this framework came through prose. This
@@ -29,6 +60,14 @@ breaking change are governed by [docs/api-stability.md](docs/api-stability.md).
   `_max_drawdown` remains as a deprecated alias.
 
 ### Changed
+- **The `crucible` floor is raised to `>=0.5.0`** for the monitor API above. Unlike the
+  0.3.0 constraint, this one is **not yet true**: the monitor is in crucible's
+  `[Unreleased]` and the newest published crucible is 0.4.0. This must not be released
+  before crucible 0.5.0 is on PyPI, or `import crucible_stack.orchestrate` raises for
+  anyone installing from PyPI. `tests/test_crucible_compat.py` gains two checks that name
+  the cause, including one asserting `edge_monitor` still has no parameter from which a
+  baseline could be rebuilt, since a future crucible relaxing that would silently make
+  `EdgeDecayTrigger` incapable of firing while every other test kept passing.
 - `crucible>=0.3.0` (was `>=0.2.0`). The honest-N API this package depends on landed after
   crucible's v0.2.0 tag, so the old constraint was satisfiable by a version that could not
   actually satisfy it. The CI workaround that installed crucible from git is gone.

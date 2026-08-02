@@ -342,3 +342,56 @@ class _QuietBook:
 
 def build_quiet():
     return _QuietBook()
+
+
+# --- the edge-decay baseline: frozen at promotion, read back on later cycles ----------
+
+def _baseline():
+    from crucible_stack.orchestrate.decay import EdgeBaseline
+    return EdgeBaseline(expectancy=0.2, sigma=1.0, n_trades=2000, trades_per_year=150.0,
+                        n_variants=64, deflated=True)
+
+
+def test_a_promotion_freezes_the_baseline_into_the_ledger():
+    led = DeploymentLedger()
+    run_cycle(book="b", ledger=led, trigger=ScheduleTrigger(cadence=1),
+              reoptimize=lambda: Reoptimization(selection=_sel(True), envelope=_env(),
+                                                baseline=_baseline()),
+              realized_r=(), now=NOW)
+    assert led.current("b").baseline == _baseline()
+
+
+def test_a_refusal_carries_no_baseline():
+    """Same rule as the envelope: refusals provision nothing, so there is never a
+    reference that a later cycle could re-baseline onto."""
+    led = _with_incumbent()
+    run_cycle(book="book_a", ledger=led, trigger=ScheduleTrigger(cadence=1),
+              reoptimize=lambda: Reoptimization(selection=_sel(False), envelope=_env(),
+                                                baseline=_baseline()),
+              realized_r=np.zeros(3), now=NOW)
+    assert led.history("book_a")[-1].baseline is None
+
+
+def test_the_cycle_reads_the_incumbents_baseline_and_fires_on_decay():
+    from crucible.validation import Thresholds
+
+    from crucible_stack.orchestrate import EdgeDecayTrigger
+
+    led = DeploymentLedger()
+    run_cycle(book="b", ledger=led, trigger=ScheduleTrigger(cadence=1),
+              reoptimize=lambda: Reoptimization(selection=_sel(True), envelope=_env(),
+                                                baseline=_baseline()),
+              realized_r=(), now=NOW)
+    decayed = np.random.default_rng(0).normal(0.05, 1.0, 3000)     # edge cut to a quarter
+    res = run_cycle(book="b", ledger=led,
+                    trigger=EdgeDecayTrigger(thresholds=Thresholds(monitor_arl0_trades=500)),
+                    reoptimize=_reopt(True), realized_r=np.zeros(3), trade_r=decayed,
+                    now=NOW)
+    assert res.fired and "edge_decay" in res.trigger.sources
+
+
+def test_trade_r_defaults_to_empty_so_existing_callers_are_unaffected():
+    """The field is additive: a caller that never passes trade_r gets the old behaviour."""
+    led = _with_incumbent()
+    res = _cycle(led, trigger=ScheduleTrigger(cadence=99), realized_r=np.zeros(3))
+    assert not res.fired

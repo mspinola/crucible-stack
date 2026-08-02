@@ -40,6 +40,11 @@ from typing import Any, Iterator, List, Mapping, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+from crucible_stack.orchestrate.decay import (
+    EdgeBaseline,
+    baseline_from_dict,
+    baseline_to_dict,
+)
 from crucible_stack.orchestrate.drift import DriftEnvelope
 
 try:
@@ -90,6 +95,7 @@ class DeploymentEntry:
     honest_n: int = 0
     fit_window: Optional[Tuple[pd.Timestamp, pd.Timestamp]] = None
     envelope: Optional[DriftEnvelope] = None
+    baseline: Optional[EdgeBaseline] = None   # frozen at promotion, for EdgeDecayTrigger
     equity_ref: Optional[str] = None        # points at the EquityResult; never a copy of it
 
     def __post_init__(self) -> None:
@@ -121,6 +127,7 @@ class DeploymentEntry:
             "fit_window": [pd.Timestamp(fw[0]).isoformat(),
                            pd.Timestamp(fw[1]).isoformat()] if fw else None,
             "envelope": self.envelope.to_dict() if self.envelope is not None else None,
+            "baseline": baseline_to_dict(self.baseline) if self.baseline is not None else None,
             "equity_ref": self.equity_ref,
         }, sort_keys=True)
 
@@ -136,6 +143,7 @@ class DeploymentEntry:
             reasons=tuple(d.get("reasons") or ()), honest_n=int(d.get("honest_n", 0)),
             fit_window=(pd.Timestamp(fw[0]), pd.Timestamp(fw[1])) if fw else None,
             envelope=DriftEnvelope.from_dict(env) if env else None,
+            baseline=baseline_from_dict(d.get("baseline")),
             equity_ref=d.get("equity_ref"),
         )
 

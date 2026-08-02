@@ -20,6 +20,11 @@ from crucible_stack.orchestrate.account_drift import (
     monthly_r,
     provision_envelope,
 )
+from crucible_stack.orchestrate.decay import (
+    baseline_from_dict,
+    baseline_to_dict,
+    check_decay,
+)
 from crucible_stack.orchestrate.drift import (
     DriftEnvelope,
     DriftVerdict,
@@ -37,6 +42,7 @@ from crucible_stack.orchestrate.runner import (
 )
 from crucible_stack.orchestrate.trigger import (
     DriftTrigger,
+    EdgeDecayTrigger,
     ScheduleTrigger,
     Trigger,
     TriggerContext,
@@ -49,6 +55,7 @@ __all__ = ["GateDecision", "evaluate", "is_promotable",
            "envelope_from_r",
            "provision_envelope", "check_account_drift", "monthly_r", "in_currency",
            "Trigger", "TriggerContext", "TriggerDecision", "ScheduleTrigger",
-           "DriftTrigger", "any_of",
+           "DriftTrigger", "EdgeDecayTrigger", "any_of",
+           "check_decay", "baseline_to_dict", "baseline_from_dict",
            "DeploymentEntry", "DeploymentLedger", "ACTIONS",
            "run_cycle", "CycleResult", "Reoptimization", "missed_windows"]
