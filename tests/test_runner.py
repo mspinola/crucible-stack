@@ -395,3 +395,51 @@ def test_trade_r_defaults_to_empty_so_existing_callers_are_unaffected():
     led = _with_incumbent()
     res = _cycle(led, trigger=ScheduleTrigger(cadence=99), realized_r=np.zeros(3))
     assert not res.fired
+
+
+# --- --edge-decay: opt-in, and it refuses rather than monitoring nothing --------------
+
+class _BookWithTrades(_Book):
+    """A book that can also answer for per-TRADE R, the newer half of the protocol."""
+
+    @staticmethod
+    def trade_r_since(since=None, params=None):
+        return np.zeros(0) if params is None else np.full(400, -0.05)
+
+
+def build_with_trades():
+    return _BookWithTrades()
+
+
+def test_edge_decay_is_off_by_default():
+    """The trigger fails open, so switching it on before a baseline exists would
+    re-optimize every cycle. Default off, and the flag has to be asked for."""
+    from crucible_stack.orchestrate.__main__ import build_parser
+    assert build_parser().parse_args(["--book", "b", "--ledger", "x"]).edge_decay is False
+
+
+def test_edge_decay_refuses_a_book_that_cannot_supply_per_trade_r(tmp_path, capsys):
+    """Silently passing an empty series would let the trigger fail open and look like a
+    monitored book. Refuse instead."""
+    from crucible_stack.orchestrate.__main__ import EXIT_ERROR, main
+    code = main(["--book", "book_a", "--ledger", str(tmp_path / "l.jsonl"),
+                 "--book-factory", "tests.test_runner:build", "--edge-decay"])
+    assert code == EXIT_ERROR
+    err = capsys.readouterr().err
+    assert "trade_r_since" in err and "Refusing" in err
+
+
+def test_edge_decay_runs_when_the_book_supplies_per_trade_r(tmp_path):
+    from crucible_stack.orchestrate.__main__ import main
+    code = main(["--book", "book_a", "--ledger", str(tmp_path / "l.jsonl"),
+                 "--book-factory", "tests.test_runner:build_with_trades",
+                 "--edge-decay", "--dry-run"])
+    assert code in (0, 3)                     # ran; halt is fine, the candidate is untrusted
+
+
+def test_the_two_r_series_come_from_different_methods(tmp_path):
+    """The periodic series is aggregated onto the envelope's grid; the per-trade one is
+    not aggregated at all. Deriving one from the other here would be the units bug."""
+    b = _BookWithTrades()
+    assert b.realized_r_since(None, {"p": 1}).size == 3       # periods
+    assert b.trade_r_since(None, {"p": 1}).size == 400        # trades
