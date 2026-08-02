@@ -33,6 +33,7 @@ import numpy as np
 import pandas as pd
 
 from crucible_stack.optimize import Selection
+from crucible_stack.orchestrate.decay import EdgeBaseline
 from crucible_stack.orchestrate.drift import DriftEnvelope
 from crucible_stack.orchestrate.gate import GateDecision, evaluate
 from crucible_stack.orchestrate.ledger import DeploymentEntry, DeploymentLedger
@@ -45,12 +46,15 @@ __all__ = ["Reoptimization", "CycleResult", "run_cycle", "missed_windows"]
 class Reoptimization:
     """What a re-optimization hands back: the verdict plus the provenance to record.
 
-    `envelope` is what the book WOULD be provisioned with if this candidate is promoted.
-    It is only ever written to the ledger on a promotion.
+    `envelope` and `baseline` are what the book WOULD be provisioned with if this
+    candidate is promoted: the path-space band and the parameter-space reference. Both are
+    only ever written to the ledger on a promotion, and both are frozen at that instant,
+    which is the property the monitors depend on.
     """
     selection: Selection
     fit_window: Optional[Tuple[pd.Timestamp, pd.Timestamp]] = None
     envelope: Optional[DriftEnvelope] = None
+    baseline: Optional[EdgeBaseline] = None
     equity_ref: Optional[str] = None
 
 
@@ -103,6 +107,7 @@ def run_cycle(
     realized_r: Sequence[float],
     now: datetime,
     cadence: Optional[int] = None,
+    trade_r: Optional[Sequence[float]] = None,
 ) -> CycleResult:
     """Run one turn of the loop for one book.
 
@@ -118,6 +123,8 @@ def run_cycle(
         realized_r=r,
         envelope=incumbent.envelope if incumbent is not None else None,
         has_incumbent=incumbent is not None,
+        trade_r=np.asarray(trade_r if trade_r is not None else (), dtype=float),
+        baseline=incumbent.baseline if incumbent is not None else None,
     )
     tdec = trigger(ctx)
     missed = missed_windows(ctx.elapsed, cadence)
@@ -147,6 +154,7 @@ def run_cycle(
         honest_n=int(getattr(sel, "honest_n", 0) or 0),
         fit_window=reopt.fit_window,
         envelope=reopt.envelope if promoting else None,   # refusals provision nothing
+        baseline=reopt.baseline if promoting else None,
         equity_ref=reopt.equity_ref if promoting else None,
     )
     ledger.record(entry)

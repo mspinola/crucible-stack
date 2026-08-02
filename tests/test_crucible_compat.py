@@ -42,3 +42,33 @@ def test_sidak_accepts_a_search_space_log_not_only_a_count():
             "accept the ledger directly so the corrected p-value cannot be computed "
             "against a count someone retyped by hand.")
     assert 0.0 <= got <= 1.0
+
+
+def test_the_edge_monitor_surface_is_present():
+    """`orchestrate.decay` and `EdgeDecayTrigger` are built on crucible's monitor, added
+    after 0.4.0. Without it the failure is an ImportError at `import
+    crucible_stack.orchestrate`, which takes the whole orchestrator down rather than only
+    the decay trigger, so it is worth naming the cause here."""
+    try:
+        from crucible.validation import (  # noqa: F401
+            EdgeBaseline,
+            MonitorVerdict,
+            cusum_design,
+            edge_monitor,
+        )
+    except ImportError as exc:                                     # pragma: no cover
+        pytest.fail(
+            f"the installed crucible predates the edge monitor ({exc}). "
+            "crucible_stack.orchestrate.decay and EdgeDecayTrigger require it. "
+            "Install crucible from main, or >= 0.5.0 once released.")
+
+
+def test_edge_monitor_still_refuses_to_rebuild_its_own_baseline():
+    """The property the decay seam is built on. If a future crucible let `edge_monitor`
+    reconstruct a baseline from current data, `EdgeDecayTrigger` would silently become
+    incapable of firing, and every test here would still pass."""
+    from crucible.validation import edge_monitor
+    assert set(inspect.signature(edge_monitor).parameters) == {
+        "trades", "baseline", "design", "thresholds"}, (
+        "edge_monitor's signature changed. The decay trigger depends on there being no "
+        "parameter from which a baseline could be rebuilt; re-check before relaxing this.")

@@ -1,15 +1,20 @@
 """trigger — when should the loop re-optimize?
 
 ADR-0003 commitment 2. The cadence is a *policy*, not a hardcoded rule, and this module is
-the seam that keeps it one. Two honest triggers compose:
+the seam that keeps it one. Three honest triggers compose:
 
   * **schedule** — Pardo's baseline: re-optimize every N periods as the out-of-sample
     window rolls forward.
-  * **drift** — the early interrupt: re-optimize as soon as the live book leaves the
-    envelope it was provisioned with (`crucible_stack.orchestrate.drift`).
+  * **drift** — the early interrupt on the equity PATH: re-optimize as soon as the live
+    book leaves the envelope it was provisioned with (`crucible_stack.orchestrate.drift`).
+  * **edge_decay** — the early interrupt on the per-trade PARAMETER: re-optimize when the
+    edge itself weakens against the baseline frozen at promotion
+    (`crucible_stack.orchestrate.decay`). Complements drift rather than duplicating it; a
+    halved expectancy can leave the path flat and inside a wide band, and a cluster of
+    correlated losers can breach the band with every per-trade statistic intact.
 
-`any_of(schedule, drift)` is the recommended hybrid: a scheduled floor with drift able to
-pull the re-optimization forward.
+`any_of(schedule, drift, edge_decay)` is the recommended hybrid: a scheduled floor with
+either monitor able to pull the re-optimization forward.
 
 **This is also the substrate seam.** Nothing here knows what invokes it — cron today, a
 workflow engine later (ADR-0003, Option A vs B). A trigger reads a `TriggerContext` and
@@ -32,10 +37,11 @@ from typing import Optional, Protocol, Tuple, runtime_checkable
 
 import numpy as np
 
+from crucible_stack.orchestrate.decay import EdgeBaseline, Thresholds, check_decay
 from crucible_stack.orchestrate.drift import DriftEnvelope, check_drift
 
 __all__ = ["TriggerContext", "TriggerDecision", "Trigger", "ScheduleTrigger",
-           "DriftTrigger", "any_of"]
+           "DriftTrigger", "EdgeDecayTrigger", "any_of"]
 
 
 @dataclass(frozen=True)
@@ -50,17 +56,32 @@ class TriggerContext:
     realized_r: np.ndarray = field(default_factory=lambda: np.zeros(0))
     envelope: Optional[DriftEnvelope] = None
     has_incumbent: bool = True
+    # Per-TRADE R since the incumbent went live, and the baseline frozen at promotion.
+    # Separate from `realized_r` because that one is PERIODIC (the grid the envelope was
+    # built on). Two different series with two different lengths; denominating one in the
+    # other is the units bug crucible fixed in v0.4.0.
+    trade_r: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    baseline: Optional[EdgeBaseline] = None
 
     def __post_init__(self) -> None:
         r = np.asarray(self.realized_r, dtype=float)
         if r.ndim != 1:
             raise ValueError(f"realized_r must be 1-D, got shape {r.shape}")
         object.__setattr__(self, "realized_r", r)
+        tr = np.asarray(self.trade_r, dtype=float)
+        if tr.ndim != 1:
+            raise ValueError(f"trade_r must be 1-D, got shape {tr.shape}")
+        object.__setattr__(self, "trade_r", tr)
 
     @property
     def elapsed(self) -> int:
         """Periods the incumbent has been live."""
         return int(self.realized_r.size)
+
+    @property
+    def trades_live(self) -> int:
+        """Trades closed since the incumbent went live. Not the same clock as `elapsed`."""
+        return int(self.trade_r.size)
 
 
 @dataclass(frozen=True)
@@ -152,6 +173,51 @@ class DriftTrigger:
         return TriggerDecision(
             fired=v.drifted, sources=(self.name,) if v.drifted else (),
             reasons=tuple(f"{self.name}: {r}" for r in v.reasons))
+
+
+@dataclass(frozen=True)
+class EdgeDecayTrigger:
+    """Fire when the promoted edge itself has weakened, not merely when the path wandered.
+
+    The parameter-space counterpart to `DriftTrigger`. Reads the frozen `EdgeBaseline` off
+    the context and never builds one, for the same reason `DriftTrigger` never builds an
+    envelope: a reference recomputed from current data re-fits onto the drifted reality and
+    the monitor can never fire. See `crucible_stack.orchestrate.decay`.
+
+    **Only DEGRADED fires.** crucible's monitor reserves that label for the CUSUM, the one
+    channel carrying a stated false-alarm rate. SLIPPING (a trailing-window dip, or a
+    firing-rate collapse) is reported in `reasons` and does not trigger, because promoting
+    an uncalibrated tripwire to a re-optimization trigger is exactly the mistake the
+    monitor's design is shaped to prevent.
+
+    With no baseline attached this fires with an explicit reason rather than staying quiet,
+    matching `DriftTrigger`'s fails-open posture: unmonitored is not the same as healthy.
+    """
+    thresholds: Optional[Thresholds] = None
+    name: str = "edge_decay"
+
+    def __call__(self, ctx: TriggerContext) -> TriggerDecision:
+        cold = _cold_start(ctx, self.name)
+        if cold is not None:
+            return cold
+        if ctx.baseline is None:
+            return TriggerDecision(
+                fired=True, sources=(self.name,),
+                reasons=(f"{self.name}: no baseline attached, so edge decay cannot be "
+                         "assessed; re-checking rather than trading unmonitored",))
+        if ctx.trades_live == 0:
+            return TriggerDecision(
+                fired=False, sources=(),
+                reasons=(f"{self.name}: no closed trades yet",))
+
+        v = check_decay(ctx.baseline, ctx.trade_r, thresholds=self.thresholds)
+        fired = v.label == "DEGRADED"
+        reasons = tuple(f"{self.name}: {r}" for r in v.reasons)
+        if v.label == "SLIPPING":
+            reasons += (f"{self.name}: SLIPPING, which does NOT trigger; only the "
+                        "calibrated detector may force a re-optimization",)
+        return TriggerDecision(fired=fired, sources=(self.name,) if fired else (),
+                               reasons=reasons)
 
 
 @dataclass(frozen=True)
