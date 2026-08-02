@@ -6,6 +6,12 @@
 > to COT only, is *as-published provenance* for that COT data inside the narrowed boundary or
 > outside it. Code changes land entirely in `cotdata`; no consumer read contract changes.
 
+> **Addendum 2026-08-02 — three statements below have been overtaken by events.** The
+> decision itself is unchanged and this record is not rewritten; see the
+> [Addendum](#addendum-2026-08-02) at the end for what has since shipped, which open
+> questions are closed, and which are now closed *as deferrals*. Read that before acting on
+> the Status block or the Open questions.
+
 **Status:** Accepted (2026-07-30), **implemented and merged**: landed in `cotdata` via
 [PR #78](https://github.com/mspinola/cotdata/pull/78). This is the ADR-0007 distinction in the
 opposite direction: 0007 was accepted as a *direction* with most of the work outstanding, whereas
@@ -138,3 +144,72 @@ snapshot ids are not parquet files.
 - **Retention.** Current policy is to keep every raw file forever (roughly 1 GB/year, dominated by
   current-year churn), on the grounds that the weekly copies *are* the vintage series and the
   storage cost is immaterial against irreplaceability. Worth revisiting only if that ratio changes.
+
+## Addendum 2026-08-02
+
+The decision is unchanged: vintage provenance is inside the narrowed `cotdata`, persisted in
+Parquet, no database. Nothing in three days of production has argued against either half. What
+follows is what the record above no longer describes accurately. The original text stands as
+written, because an ADR is a record of a decision at a moment, not a status page.
+
+### Corrections to the Status block
+
+1. **"No production vintage has been captured yet" is false.** Capture began 2026-07-31 and runs
+   daily at 17:00 ET on the Windows producer, syncing outward to the replicas. As of today the
+   store holds 224,280 observation rows across report years 2025 and 2026, from 18 snapshots.
+   The series starts 2026-07-31 and only accumulates forward, exactly as the Context predicted.
+2. **"disaggregated/TFF ingest canonicalisers" did not stay unshipped.** They landed in
+   [cotdata #83](https://github.com/mspinola/cotdata/pull/83), so all three report types ingest
+   end to end. The Open question below that says only Legacy is wired is closed.
+3. **Zero revisions have been detected so far.** Not a defect and not a surprise: the store has
+   not yet lived through a CFTC restatement. It does mean every claim about revision behaviour in
+   this ADR remains untested against a real event, which is the honest status of the subsystem's
+   central purpose.
+
+### Open questions, resolved
+
+- **Disaggregated and TFF canonicalisers: CLOSED, shipped.** See above.
+- **The `announced` release-date tier: CLOSED, built** in
+  [cotdata #91](https://github.com/mspinola/cotdata/pull/91). This was not in the Open questions
+  here but was recorded in `cotdata/docs/design/cot_vintage.md` §9 as acceptance criterion 5
+  unmet, on the grounds that extracting a release date from free-text prose would be guessing.
+  The reasoning was sound and the premise was never checked: CFTC publishes rescheduled releases
+  as an exact `COT Report Date | Original Publish Date | New Publish Date` table. The extractor
+  reads tables and still refuses prose. It moves 36,296 stored rows off the `derived` fallback,
+  covering the whole Oct–Dec 2025 appropriations-lapse backlog, whose worst week was dated 47
+  days early — before the lapse that stopped it being published.
+
+### Open questions, closed as deliberate deferrals
+
+These are decided rather than pending. Reopening any is a new decision, not a resumption.
+
+- **Futures-and-options-combined stays uncaptured.** Verified still constant-`False` across all
+  224,280 rows. Adding it remains a fetch-list change with no schema migration, as the original
+  text says. Nothing needs it today.
+- **Revision-driven cache invalidation stays unbuilt.** With zero revisions recorded, there is
+  nothing to invalidate and no way to test a design against reality. Revisit at the first real
+  revision, which is also what unblocks the point-in-time replay check that `crowdmon` has
+  waiting (not before 2026-11-01).
+- **Retention policy stands.** Keep everything; the ratio that would justify revisiting has not
+  moved.
+
+### One thing this ADR got right that is worth recording
+
+The Consequences section claimed the design created a **deployment constraint**: the vintage tree
+must not be written on a machine whose store is mirrored from a producer. That constraint held up
+under contact. Capture runs on the producer and syncs outward, as specified, and the Mac replica
+carries the tree read-only. A watchdog now checks its freshness on the replica, because the
+existing sync verification watched `status.json`, which the COT and prices tasks rewrite even when
+the vintage task is dead — a failure mode nothing would otherwise have noticed.
+
+### Production experience worth carrying
+
+The first operational defect was in the alarm, not the data: the frozen-year "detector went blind"
+tripwire fired every Saturday on all three prior-year sources while working perfectly. CFTC
+regenerates the prior year weekly, the capture task runs daily, and the trigger asked "did the
+last run see bytes?", which on a daily schedule is a day-of-week test. Fixed in
+[cotdata #90](https://github.com/mspinola/cotdata/pull/90) by measuring elapsed silence instead.
+
+The general lesson is one this ADR's own subject matter keeps teaching: an expectation written per
+week and evaluated per run is a bug waiting for a scheduler, and the design doc contained both
+halves of the contradiction in adjacent paragraphs the whole time.
