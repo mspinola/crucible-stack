@@ -11,11 +11,23 @@ The factory takes no arguments and returns an object exposing:
 
     .reoptimize()                    -> Reoptimization
     .realized_r_since(since, params) -> periodic R since the incumbent went live
+    .trade_r_since(since, params)    -> per-TRADE R since then  [only with --edge-decay]
 
 `since` and `params` come off the ledger's current entry, not from the book. The book cannot
 know when its parameters were promoted, and a realized series measured over the wrong window
 would be compared against the envelope's band for a different elapsed period — a silently
 wrong answer rather than an error.
+
+The two R series are different objects and must not be derived from each other here: the
+periodic one is aggregated onto the grid the drift envelope was built on, the per-trade one
+is not aggregated at all. A book typically produces both from the same trades, resampling
+for the first and not for the second.
+
+`--edge-decay` is **opt-in and off by default**, deliberately. `EdgeDecayTrigger` fails open,
+so switching it on for a book that has no frozen baseline yet makes every cycle fire and
+re-optimize, which taxes the honest N for no information. A baseline is only written on a
+promotion, so the sequence is: teach the book `trade_r_since` and a
+`Reoptimization.baseline`, let one promotion happen, then turn the flag on.
 
 Exit codes are chosen for cron's benefit: a non-zero status is how an unattended job gets
 someone's attention.
@@ -40,7 +52,12 @@ from datetime import datetime
 
 from crucible_stack.orchestrate.ledger import DeploymentLedger
 from crucible_stack.orchestrate.runner import run_cycle
-from crucible_stack.orchestrate.trigger import DriftTrigger, ScheduleTrigger, any_of
+from crucible_stack.orchestrate.trigger import (
+    DriftTrigger,
+    EdgeDecayTrigger,
+    ScheduleTrigger,
+    any_of,
+)
 
 EXIT_OK, EXIT_ERROR, EXIT_HALT, EXIT_MISSED = 0, 1, 3, 4
 
@@ -64,6 +81,11 @@ def build_parser() -> argparse.ArgumentParser:
                         "(required to run a cycle; not needed for --status)")
     p.add_argument("--cadence", type=int, default=6,
                    help="scheduled re-optimization cadence in months (default: 6)")
+    p.add_argument("--edge-decay", action="store_true",
+                   help="also watch per-trade edge decay against the baseline frozen at "
+                        "promotion. Off by default: the trigger fails open, so enabling it "
+                        "before a baseline exists re-optimizes on every cycle. Requires the "
+                        "book to expose trade_r_since(since, params).")
     p.add_argument("--breach-level", type=float, default=None,
                    help="quantile counting as a drift breach (default: envelope's lowest)")
     p.add_argument("--dry-run", action="store_true",
@@ -149,13 +171,30 @@ def main(argv=None) -> int:
             incumbent.params if incumbent is not None else None,
         )
 
+        triggers = [ScheduleTrigger(cadence=args.cadence),
+                    DriftTrigger(breach_level=args.breach_level)]
+        trade_r = ()
+        if args.edge_decay:
+            source = getattr(book, "trade_r_since", None)
+            if source is None:
+                print("[orchestrate] --edge-decay requires the book to expose "
+                      f"trade_r_since(since, params); {type(book).__name__} does not. "
+                      "Refusing rather than monitoring nothing.", file=sys.stderr)
+                return EXIT_ERROR
+            # same window as the periodic series, off the ledger for the same reason
+            trade_r = source(
+                incumbent.timestamp if incumbent is not None else None,
+                incumbent.params if incumbent is not None else None,
+            )
+            triggers.append(EdgeDecayTrigger())
+
         result = run_cycle(
             book=args.book,
             ledger=ledger,
-            trigger=any_of(ScheduleTrigger(cadence=args.cadence),
-                           DriftTrigger(breach_level=args.breach_level)),
+            trigger=any_of(*triggers),
             reoptimize=book.reoptimize,
             realized_r=realized,
+            trade_r=trade_r,
             now=datetime.now(),                    # the ONLY clock read in the system
             cadence=args.cadence,
         )
