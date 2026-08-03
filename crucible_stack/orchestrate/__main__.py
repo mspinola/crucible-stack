@@ -12,6 +12,7 @@ The factory takes no arguments and returns an object exposing:
     .reoptimize()                    -> Reoptimization
     .realized_r_since(since, params) -> periodic R since the incumbent went live
     .trade_r_since(since, params)    -> per-TRADE R since then  [only with --edge-decay]
+    .trade_dates_since(since, params)-> entry dates for those trades  [optional]
 
 `since` and `params` come off the ledger's current entry, not from the book. The book cannot
 know when its parameters were promoted, and a realized series measured over the wrong window
@@ -22,6 +23,13 @@ The two R series are different objects and must not be derived from each other h
 periodic one is aggregated onto the grid the drift envelope was built on, the per-trade one
 is not aggregated at all. A book typically produces both from the same trades, resampling
 for the first and not for the second.
+
+`trade_dates_since` is optional where the other two are not, and its absence is reported
+rather than fatal: it feeds only the firing-rate channel, which compares how often the
+signal fires now against how often it fired in the baseline. A book that cannot date its
+trades is still worth monitoring on expectancy. Supplying R without dates, though, leaves
+that channel silently off, and it is the one that catches a signal that has stopped firing
+while the trades it still takes look as good as ever.
 
 `--edge-decay` is **opt-in and off by default**, deliberately. `EdgeDecayTrigger` fails open,
 so switching it on for a book that has no frozen baseline yet makes every cycle fire and
@@ -174,6 +182,7 @@ def main(argv=None) -> int:
         triggers = [ScheduleTrigger(cadence=args.cadence),
                     DriftTrigger(breach_level=args.breach_level)]
         trade_r = ()
+        trade_dates = None
         if args.edge_decay:
             source = getattr(book, "trade_r_since", None)
             if source is None:
@@ -182,10 +191,20 @@ def main(argv=None) -> int:
                       "Refusing rather than monitoring nothing.", file=sys.stderr)
                 return EXIT_ERROR
             # same window as the periodic series, off the ledger for the same reason
-            trade_r = source(
-                incumbent.timestamp if incumbent is not None else None,
-                incumbent.params if incumbent is not None else None,
-            )
+            since = incumbent.timestamp if incumbent is not None else None
+            params = incumbent.params if incumbent is not None else None
+            trade_r = source(since, params)
+            # Optional, unlike trade_r: without dates the firing-rate channel is off and
+            # the verdict says so. A book that cannot date its trades is still worth
+            # monitoring on expectancy, so this warns rather than refusing.
+            dated = getattr(book, "trade_dates_since", None)
+            if dated is None:
+                print("[orchestrate] note: "
+                      f"{type(book).__name__} exposes no trade_dates_since(since, params), "
+                      "so the firing-rate channel is off; edge decay is judged on "
+                      "per-trade expectancy alone.", file=sys.stderr)
+            else:
+                trade_dates = dated(since, params)
             triggers.append(EdgeDecayTrigger())
 
         result = run_cycle(
@@ -195,6 +214,7 @@ def main(argv=None) -> int:
             reoptimize=book.reoptimize,
             realized_r=realized,
             trade_r=trade_r,
+            trade_dates=trade_dates,
             now=datetime.now(),                    # the ONLY clock read in the system
             cadence=args.cadence,
         )

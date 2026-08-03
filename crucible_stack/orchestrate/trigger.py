@@ -62,6 +62,11 @@ class TriggerContext:
     # other is the units bug crucible fixed in v0.4.0.
     trade_r: np.ndarray = field(default_factory=lambda: np.zeros(0))
     baseline: Optional[EdgeBaseline] = None
+    # Entry dates for those same trades, parallel to `trade_r`. Optional, and consumed by
+    # exactly one channel: the live firing rate, compared against the baseline's. Without
+    # them that channel is off, so a book that has quietly stopped firing reads healthy
+    # for as long as the few trades it still takes keep their per-trade edge.
+    trade_dates: Optional[np.ndarray] = None
 
     def __post_init__(self) -> None:
         r = np.asarray(self.realized_r, dtype=float)
@@ -72,6 +77,18 @@ class TriggerContext:
         if tr.ndim != 1:
             raise ValueError(f"trade_r must be 1-D, got shape {tr.shape}")
         object.__setattr__(self, "trade_r", tr)
+        if self.trade_dates is not None:
+            td = np.asarray(self.trade_dates)
+            if td.ndim != 1:
+                raise ValueError(f"trade_dates must be 1-D, got shape {td.shape}")
+            # A length mismatch would not raise downstream, it would date the wrong
+            # trades and yield a firing rate that is wrong in a direction nothing else
+            # in the verdict would reveal. Cheaper to refuse here.
+            if td.size != tr.size:
+                raise ValueError(
+                    f"trade_dates has {td.size} entries but trade_r has {tr.size}; "
+                    "they describe the same trades and must be parallel")
+            object.__setattr__(self, "trade_dates", td)
 
     @property
     def elapsed(self) -> int:
@@ -210,7 +227,8 @@ class EdgeDecayTrigger:
                 fired=False, sources=(),
                 reasons=(f"{self.name}: no closed trades yet",))
 
-        v = check_decay(ctx.baseline, ctx.trade_r, thresholds=self.thresholds)
+        v = check_decay(ctx.baseline, ctx.trade_r, trade_dates=ctx.trade_dates,
+                        thresholds=self.thresholds)
         fired = v.label == "DEGRADED"
         reasons = tuple(f"{self.name}: {r}" for r in v.reasons)
         if v.label == "SLIPPING":

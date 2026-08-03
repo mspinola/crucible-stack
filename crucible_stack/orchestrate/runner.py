@@ -108,6 +108,7 @@ def run_cycle(
     now: datetime,
     cadence: Optional[int] = None,
     trade_r: Optional[Sequence[float]] = None,
+    trade_dates: Optional[Sequence[object]] = None,
 ) -> CycleResult:
     """Run one turn of the loop for one book.
 
@@ -125,6 +126,7 @@ def run_cycle(
         has_incumbent=incumbent is not None,
         trade_r=np.asarray(trade_r if trade_r is not None else (), dtype=float),
         baseline=incumbent.baseline if incumbent is not None else None,
+        trade_dates=None if trade_dates is None else np.asarray(trade_dates),
     )
     tdec = trigger(ctx)
     missed = missed_windows(ctx.elapsed, cadence)

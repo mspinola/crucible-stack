@@ -6,6 +6,27 @@ breaking change are governed by [docs/api-stability.md](docs/api-stability.md).
 
 ## [Unreleased]
 
+### Fixed
+- **The edge monitor's firing-rate channel was dead through the orchestrator.**
+  `check_decay` built its `TradeLog` from bare floats (`TradeLog.from_arrays(trade_r)`),
+  while crucible derives the live firing rate from the log's `entry_date`. So
+  `live_trades_per_year` and `frequency_ratio` came back `None` on every cycle, for every
+  book, however carefully the baseline's own rate had been frozen at promotion. Two of the
+  monitor's three channels ran; the third reported itself off and nothing said why.
+
+  It is the channel that matters most on its own, because neither of the others can see
+  the failure it covers: a signal that stops firing while the trades it still takes keep
+  their per-trade edge. Expectancy is unchanged, so the CUSUM stays quiet and the rolling
+  window reads full size, and annual R falls anyway because the opportunity set shrank.
+
+  `check_decay` now takes `trade_dates`, `TriggerContext` carries them (refusing a length
+  mismatch against `trade_r`, which would mis-date the rate rather than fail), `run_cycle`
+  forwards them, and `EdgeDecayTrigger` passes them through. The CLI sources them from an
+  optional `trade_dates_since(since, params)` on the book. Absence stays legal and is now
+  *reported* rather than silent, since a book that cannot date its trades is still worth
+  monitoring on expectancy. No crucible change was needed: `TradeLog.from_arrays` has
+  accepted `entry_date` all along.
+
 ### Added
 - **`crucible_stack.orchestrate.decay` and `EdgeDecayTrigger`**: the parameter-space
   counterpart to `drift`. `drift` watches the equity **path** (cumulative R and drawdown
