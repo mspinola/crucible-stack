@@ -6,6 +6,25 @@ breaking change are governed by [docs/api-stability.md](docs/api-stability.md).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-02
+
+The deployment-monitoring release. 0.1.0 shipped the define / search / size / deploy
+framework; this adds the half that runs *after* a promotion, and the API-stability
+policy that says what any of it promises.
+
+`drift` already watched the equity **path**. This adds the per-trade **parameter**:
+`orchestrate.decay` over crucible's edge monitor, `EdgeDecayTrigger`, an `EdgeBaseline`
+frozen into the `DeploymentLedger` beside the `DriftEnvelope`, and the `--edge-decay` /
+`--arl0-years` flags that drive them. The two monitors come apart in both directions, so
+running only one leaves a real failure invisible.
+
+**`--edge-decay` is off by default, and the order matters.** `EdgeDecayTrigger` fails
+open, so enabling it before a promotion has written a baseline makes every cycle fire and
+re-optimize, and every promotion freezes a *new* envelope. The drift envelope would then
+be discarded on every tick and never allowed to mean anything, which is the re-baselining
+trap both monitors are built to refuse, arriving through the back door. Let one promotion
+write a baseline first.
+
 ### Added
 - **`--arl0-years`**, exposing the edge-decay CUSUM's false-alarm budget on the CLI.
   `EdgeDecayTrigger` has always taken a `Thresholds`, but `__main__` built it with none,
@@ -26,28 +45,6 @@ breaking change are governed by [docs/api-stability.md](docs/api-stability.md).
   crucible falls back to `monitor_arl0_trades` and the flag does nothing). A non-positive
   budget raises, since it is a span of calendar time.
 
-### Fixed
-- **The edge monitor's firing-rate channel was dead through the orchestrator.**
-  `check_decay` built its `TradeLog` from bare floats (`TradeLog.from_arrays(trade_r)`),
-  while crucible derives the live firing rate from the log's `entry_date`. So
-  `live_trades_per_year` and `frequency_ratio` came back `None` on every cycle, for every
-  book, however carefully the baseline's own rate had been frozen at promotion. Two of the
-  monitor's three channels ran; the third reported itself off and nothing said why.
-
-  It is the channel that matters most on its own, because neither of the others can see
-  the failure it covers: a signal that stops firing while the trades it still takes keep
-  their per-trade edge. Expectancy is unchanged, so the CUSUM stays quiet and the rolling
-  window reads full size, and annual R falls anyway because the opportunity set shrank.
-
-  `check_decay` now takes `trade_dates`, `TriggerContext` carries them (refusing a length
-  mismatch against `trade_r`, which would mis-date the rate rather than fail), `run_cycle`
-  forwards them, and `EdgeDecayTrigger` passes them through. The CLI sources them from an
-  optional `trade_dates_since(since, params)` on the book. Absence stays legal and is now
-  *reported* rather than silent, since a book that cannot date its trades is still worth
-  monitoring on expectancy. No crucible change was needed: `TradeLog.from_arrays` has
-  accepted `entry_date` all along.
-
-### Added
 - **`crucible_stack.orchestrate.decay` and `EdgeDecayTrigger`**: the parameter-space
   counterpart to `drift`. `drift` watches the equity **path** (cumulative R and drawdown
   against the frozen envelope); this watches the per-trade **parameter** (expectancy, and
@@ -101,14 +98,48 @@ breaking change are governed by [docs/api-stability.md](docs/api-stability.md).
   `_max_drawdown` remains as a deprecated alias.
 
 ### Changed
-- **The `crucible` floor is raised to `>=0.5.0`** for the monitor API above. Unlike the
-  0.3.0 constraint, this one is **not yet true**: the monitor is in crucible's
-  `[Unreleased]` and the newest published crucible is 0.4.0. This must not be released
-  before crucible 0.5.0 is on PyPI, or `import crucible_stack.orchestrate` raises for
-  anyone installing from PyPI. `tests/test_crucible_compat.py` gains two checks that name
-  the cause, including one asserting `edge_monitor` still has no parameter from which a
-  baseline could be rebuilt, since a future crucible relaxing that would silently make
-  `EdgeDecayTrigger` incapable of firing while every other test kept passing.
-- `crucible>=0.3.0` (was `>=0.2.0`). The honest-N API this package depends on landed after
-  crucible's v0.2.0 tag, so the old constraint was satisfiable by a version that could not
-  actually satisfy it. The CI workaround that installed crucible from git is gone.
+- **The `crucible` floor is `>=0.6.0`** (was `>=0.2.0` at 0.1.0). It moved three times
+  across this release and the intermediate notes are collapsed here rather than left
+  looking live: `>=0.3.0` for the honest-N API, `>=0.5.0` for `validation.monitor`
+  (`EdgeBaseline` / `edge_monitor`), and `>=0.6.0` for
+  `Thresholds.monitor_arl0_years`, which `--arl0-years` constructs. All three are true
+  as of this release; crucible 0.6.0 published 2026-08-02.
+
+  The `>=0.5.0` step carried a warning that it was not yet satisfiable, which is why
+  the CI workaround that installed crucible from git is gone. The `>=0.6.0` step was
+  briefly *wrong* rather than aspirational, and that is the more useful lesson: the
+  flag merged while the pin still said `0.5.0`, whose `Thresholds` has no such field.
+  A floor is only ever exercised by the version you do NOT have, so with every local
+  checkout on 0.6.0 nothing failed. `tests/test_crucible_compat.py` now reads the
+  declared floor out of `pyproject.toml` and fails when it falls behind the APIs the
+  package uses, alongside its existing checks that the monitor surface is importable
+  and that `edge_monitor` still has no parameter from which a baseline could be
+  rebuilt (a future crucible relaxing that would silently make `EdgeDecayTrigger`
+  incapable of firing while every other test kept passing).
+
+### Fixed
+- **The edge monitor's firing-rate channel was dead through the orchestrator.**
+  `check_decay` built its `TradeLog` from bare floats (`TradeLog.from_arrays(trade_r)`),
+  while crucible derives the live firing rate from the log's `entry_date`. So
+  `live_trades_per_year` and `frequency_ratio` came back `None` on every cycle, for every
+  book, however carefully the baseline's own rate had been frozen at promotion. Two of the
+  monitor's three channels ran; the third reported itself off and nothing said why.
+
+  It is the channel that matters most on its own, because neither of the others can see
+  the failure it covers: a signal that stops firing while the trades it still takes keep
+  their per-trade edge. Expectancy is unchanged, so the CUSUM stays quiet and the rolling
+  window reads full size, and annual R falls anyway because the opportunity set shrank.
+
+  `check_decay` now takes `trade_dates`, `TriggerContext` carries them (refusing a length
+  mismatch against `trade_r`, which would mis-date the rate rather than fail), `run_cycle`
+  forwards them, and `EdgeDecayTrigger` passes them through. The CLI sources them from an
+  optional `trade_dates_since(since, params)` on the book. Absence stays legal and is now
+  *reported* rather than silent, since a book that cannot date its trades is still worth
+  monitoring on expectancy. No crucible change was needed: `TradeLog.from_arrays` has
+  accepted `entry_date` all along.
+
+## [0.1.0] - 2026-07-23
+
+First release. The define / search / size / deploy framework, strategies not
+included. No changelog section was written at the time; this heading exists so the
+published version is on the record.
