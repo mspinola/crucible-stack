@@ -16,4 +16,4 @@ Dependency direction is one-way, as with every seam in this project:
 
 See ADR-0004 for the reasoning, and ADR-0003 for the deployment loop's design.
 """
-__version__ = "0.1.0.dev0"
+__version__ = "0.2.0"
