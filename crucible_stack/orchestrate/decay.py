@@ -48,14 +48,23 @@ __all__ = ["check_decay", "baseline_to_dict", "baseline_from_dict",
 
 
 def check_decay(baseline: EdgeBaseline, trade_r: Sequence[float], *,
+                trade_dates: Optional[Sequence[Any]] = None,
                 thresholds: Optional[Thresholds] = None) -> MonitorVerdict:
     """Judge a frozen baseline against per-TRADE R since promotion. The judging is
     crucible's; what this adds is the seam.
 
     `trade_r` is per-trade, not the periodic series `check_drift` consumes. Deliberately
     has no parameter from which a baseline could be rebuilt, matching `check_drift`.
+
+    `trade_dates` are the live trades' entry dates, parallel to `trade_r`. They feed one
+    channel only: crucible derives the live firing rate from them and compares it against
+    `baseline.trades_per_year`. Passing R alone leaves that channel permanently off, which
+    is not a neutral default, because it is the channel that catches a signal quietly
+    ceasing to fire while per-trade expectancy still reads full size. Omitting them stays
+    legal (a book that cannot date its trades is honestly reported as having the channel
+    off) but that should be a fact about the book rather than an accident of the seam.
     """
-    return edge_monitor(TradeLog.from_arrays(trade_r), baseline,
+    return edge_monitor(TradeLog.from_arrays(trade_r, entry_date=trade_dates), baseline,
                         thresholds=thresholds or Thresholds())
 
 

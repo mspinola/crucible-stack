@@ -140,10 +140,87 @@ def test_trade_r_must_be_one_dimensional():
         TriggerContext(trade_r=np.zeros((3, 4)))
 
 
+# ── the firing-rate channel ─────────────────────────────────────────────────────────
+
+def _dates(n, *, per_year, start="2024-01-01"):
+    """n entry dates spaced to fire at `per_year`."""
+    step = 365.25 / per_year
+    return np.array([np.datetime64(start) + np.timedelta64(int(round(i * step)), "D")
+                     for i in range(n)])
+
+
+def test_without_dates_the_firing_rate_channel_is_off():
+    """The regression this block exists for. `check_decay` built its log from bare floats,
+    so crucible could never derive a live rate: the channel was dead for every book through
+    the orchestrator, however carefully the baseline's own rate had been frozen."""
+    v = check_decay(_baseline(), _r(0.2, n=300, seed=4))
+    assert v.live_trades_per_year is None and v.frequency_ratio is None
+    assert any("no entry_date" in r for r in v.reasons)
+
+
+def test_with_dates_the_channel_reports_a_ratio():
+    n = 300
+    v = check_decay(_baseline(trades_per_year=150.0), _r(0.2, n=n, seed=4),
+                    trade_dates=_dates(n, per_year=150.0))
+    assert v.live_trades_per_year == pytest.approx(150.0, rel=0.02)
+    assert v.frequency_ratio == pytest.approx(1.0, rel=0.02)
+
+
+def test_a_signal_that_stopped_firing_is_caught_only_by_the_dated_channel():
+    """The failure mode the channel exists for: per-trade expectancy is INTACT, so the
+    CUSUM and the rolling window both read healthy and only the rate has collapsed."""
+    n = 300
+    r = _r(0.2, n=n, seed=4)                        # edge exactly at baseline
+    baseline = _baseline(trades_per_year=150.0)
+    assert check_decay(baseline, r).label == "HOLDING"           # undated: blind
+
+    v = check_decay(baseline, r, trade_dates=_dates(n, per_year=30.0))
+    assert v.frequency_ratio == pytest.approx(0.2, rel=0.02)
+    assert v.label == "SLIPPING"
+    assert any("fires at" in x for x in v.reasons)
+
+
+def test_a_collapsed_firing_rate_reports_but_does_not_trigger():
+    """Uncalibrated, so it caps at SLIPPING. Same rule as the rolling window."""
+    n = 300
+    ctx = TriggerContext(trade_r=_r(0.2, n=n, seed=4),
+                         baseline=_baseline(trades_per_year=150.0),
+                         trade_dates=_dates(n, per_year=30.0))
+    d = EdgeDecayTrigger()(ctx)
+    assert not d.fired
+    assert any("does NOT trigger" in x for x in d.reasons)
+
+
+def test_misaligned_dates_are_refused_rather_than_mis_dating_the_rate():
+    with pytest.raises(ValueError, match="must be parallel"):
+        TriggerContext(trade_r=np.zeros(10), trade_dates=_dates(4, per_year=150.0))
+
+
+def test_trade_dates_must_be_one_dimensional():
+    with pytest.raises(ValueError, match="trade_dates must be 1-D"):
+        TriggerContext(trade_r=np.zeros(4), trade_dates=np.zeros((2, 2)))
+
+
+def test_the_trigger_forwards_the_dates_it_was_given():
+    """Guards the wire itself. A trigger that dropped `trade_dates` would leave every
+    verdict looking exactly like the undated case above, with nothing else to notice."""
+    n = 300
+    ctx = TriggerContext(trade_r=_r(0.2, n=n, seed=4),
+                         baseline=_baseline(trades_per_year=150.0),
+                         trade_dates=_dates(n, per_year=30.0))
+    undated = TriggerContext(trade_r=ctx.trade_r, baseline=ctx.baseline)
+    assert "ctx.trade_dates" in inspect.getsource(EdgeDecayTrigger)
+    assert EdgeDecayTrigger()(ctx).reasons != EdgeDecayTrigger()(undated).reasons
+
+
 def test_check_decay_cannot_rebuild_a_baseline():
-    """Same guard crucible puts on edge_monitor, re-asserted at the seam that persists it."""
+    """Same guard crucible puts on edge_monitor, re-asserted at the seam that persists it.
+
+    `trade_dates` describes the LIVE trades, so it cannot reconstruct a reference: it has
+    no expectancy in it, only when the trades happened.
+    """
     assert set(inspect.signature(check_decay).parameters) == {
-        "baseline", "trade_r", "thresholds"}
+        "baseline", "trade_r", "trade_dates", "thresholds"}
 
 
 def test_the_trigger_reads_the_baseline_and_never_builds_one():
