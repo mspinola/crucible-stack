@@ -72,3 +72,42 @@ def test_edge_monitor_still_refuses_to_rebuild_its_own_baseline():
         "trades", "baseline", "design", "thresholds"}, (
         "edge_monitor's signature changed. The decay trigger depends on there being no "
         "parameter from which a baseline could be rebuilt; re-check before relaxing this.")
+
+
+def test_the_false_alarm_budget_can_be_set_in_years():
+    """`--arl0-years` builds `Thresholds(monitor_arl0_years=...)`, added in crucible
+    0.6.0. On 0.5.0 that field does not exist and the dataclass raises TypeError the
+    first time anyone passes the flag, which is a long way from the version constraint
+    that allowed it."""
+    from crucible.validation import Thresholds
+    try:
+        t = Thresholds(monitor_arl0_years=10.0)
+    except TypeError as exc:                                       # pragma: no cover
+        pytest.fail(
+            f"the installed crucible predates the calendar-time budget ({exc}). "
+            "--arl0-years requires Thresholds.monitor_arl0_years; install crucible "
+            ">= 0.6.0.")
+    assert t.monitor_arl0_years == 10.0
+    # and the trades fallback is still there for a baseline with no known firing rate
+    assert getattr(t, "monitor_arl0_trades", None) is not None
+
+
+def test_the_floor_is_not_lower_than_the_apis_this_package_uses():
+    """The floor is a claim about the OLDEST crucible that works, and the tests above
+    only ever run against whatever is installed, which is normally the newest. So check
+    the declared floor itself, and fail when someone adds an API without raising it.
+
+    Keep `MIN` in step with the `crucible>=` pin in pyproject.toml and with the newest
+    crucible feature this package touches.
+    """
+    import pathlib
+    import re
+
+    MIN = "0.6.0"                       # bump with the pin when a newer API is adopted
+    text = (pathlib.Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()
+    m = re.search(r'"crucible>=([0-9.]+)"', text)
+    assert m, "no crucible floor found in pyproject.toml"
+    assert m.group(1) == MIN, (
+        f"pyproject pins crucible>={m.group(1)} but this package uses APIs added in "
+        f"{MIN}. A floor satisfied by a crucible that cannot run the code is worse than "
+        "no floor: it resolves, installs, and fails at the call site.")
