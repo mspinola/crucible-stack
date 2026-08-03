@@ -36,12 +36,17 @@ dependencies = [
     # not evidence that an API is present, which is the whole reason that test exists.
     #
     # RAISED TO 0.5.0 for crucible.validation.monitor (EdgeBaseline / edge_monitor),
-    # which orchestrate.decay and EdgeDecayTrigger are built on. Unlike the 0.3.0 note
-    # above, this constraint is NOT yet true: at the time of writing the monitor sits in
-    # crucible's [Unreleased] and the newest published crucible is 0.4.0. This must not
-    # merge before crucible 0.5.0 is on PyPI, or `pip install crucible-stack` resolves
-    # to a crucible without the monitor and `import crucible_stack.orchestrate` raises.
-    "crucible>=0.5.0",
+    # which orchestrate.decay and EdgeDecayTrigger are built on. That note used to warn
+    # the constraint was not yet true; crucible 0.5.0 published 2026-08-02, so it is.
+    #
+    # RAISED TO 0.6.0 for Thresholds.monitor_arl0_years, which --arl0-years constructs.
+    # This one was briefly WRONG rather than aspirational: the flag merged while the
+    # floor still said 0.5.0, whose Thresholds has no such field, so a fresh
+    # `pip install crucible-stack` could resolve a crucible that raises TypeError the
+    # first time anyone passed it. Nothing caught it, because every local checkout
+    # already had 0.6.0 installed and a floor is only exercised by the version you do
+    # NOT have. Raise the floor in the same change as the API, never afterwards.
+    "crucible>=0.6.0",
 ]
 
 [project.optional-dependencies]
