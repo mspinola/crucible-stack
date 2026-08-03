@@ -443,3 +443,87 @@ def test_the_two_r_series_come_from_different_methods(tmp_path):
     b = _BookWithTrades()
     assert b.realized_r_since(None, {"p": 1}).size == 3       # periods
     assert b.trade_r_since(None, {"p": 1}).size == 400        # trades
+
+
+# --- the false-alarm budget, exposed on the CLI -------------------------------------
+
+def test_arl0_years_defaults_to_none_so_cruciblees_own_default_applies():
+    """None rather than a materialized Thresholds(). Building one eagerly would pin
+    today's numbers here, so a retune in crucible would stop reaching this CLI."""
+    from crucible_stack.orchestrate.__main__ import _decay_thresholds, build_parser
+    args = build_parser().parse_args(["--book", "b", "--ledger", "x"])
+    assert args.arl0_years is None
+    assert _decay_thresholds(args) is None
+
+
+def test_arl0_years_builds_a_thresholds_carrying_only_that_change():
+    from crucible_stack.orchestrate.__main__ import _decay_thresholds, build_parser
+    from crucible_stack.orchestrate.decay import Thresholds
+    args = build_parser().parse_args(
+        ["--book", "b", "--ledger", "x", "--edge-decay", "--arl0-years", "10"])
+    t = _decay_thresholds(args)
+    assert t.monitor_arl0_years == 10.0
+    # every other knob is left where crucible put it
+    d = Thresholds()
+    for f in ("monitor_detect_shift", "monitor_window", "monitor_slip_ratio",
+              "monitor_min_frequency_ratio", "monitor_arl0_trades"):
+        assert getattr(t, f) == getattr(d, f)
+
+
+def test_a_tighter_budget_buys_detection_latency():
+    """The whole reason the knob is worth exposing. Halving the budget roughly halves
+    the trades spent at a halved edge before the alarm."""
+    from crucible.validation import EdgeBaseline, cusum_design
+
+    from crucible_stack.orchestrate.decay import Thresholds
+    base = EdgeBaseline(expectancy=0.5, sigma=3.5, n_trades=900, trades_per_year=23.0)
+    slow = cusum_design(base, thresholds=Thresholds(monitor_arl0_years=25))
+    fast = cusum_design(base, thresholds=Thresholds(monitor_arl0_years=10))
+    assert fast.arl1 < slow.arl1                  # detects sooner
+    assert fast.arl0 < slow.arl0                  # and cries wolf more often
+    assert fast.h_std < slow.h_std
+
+
+def test_a_non_positive_budget_is_refused():
+    """It is a span of calendar time. Zero or negative has no reading, and argparse
+    would otherwise hand it straight to the solver."""
+    import pytest
+
+    from crucible_stack.orchestrate.__main__ import _decay_thresholds, build_parser
+    for bad in ("0", "-5"):
+        args = build_parser().parse_args(
+            ["--book", "b", "--ledger", "x", "--edge-decay", "--arl0-years", bad])
+        with pytest.raises(ValueError, match="must be positive"):
+            _decay_thresholds(args)
+
+
+def test_the_budget_without_the_monitor_says_so_rather_than_being_ignored(tmp_path, capsys):
+    """A tuning flag that tunes nothing is worse than a missing one: it reads as applied."""
+    from crucible_stack.orchestrate.__main__ import main
+    main(["--book", "book_a", "--ledger", str(tmp_path / "l.jsonl"),
+          "--book-factory", "tests.test_runner:build_with_trades",
+          "--arl0-years", "10", "--dry-run"])
+    err = capsys.readouterr().err
+    assert "--arl0-years is set but --edge-decay is off" in err
+
+
+def test_a_years_budget_on_an_undated_baseline_warns_that_it_cannot_apply(tmp_path, capsys):
+    """Years are converted using the BASELINE's own firing rate. Without one crucible
+    falls back to the trade-count budget, so the flag silently does nothing."""
+    from datetime import datetime
+
+    from crucible.validation import EdgeBaseline
+
+    from crucible_stack.orchestrate.__main__ import main
+    from crucible_stack.orchestrate.ledger import DeploymentEntry, DeploymentLedger
+
+    path = str(tmp_path / "l.jsonl")
+    DeploymentLedger(path).record(DeploymentEntry(
+        book="book_a", timestamp=datetime(2026, 1, 1), action="promote",
+        trigger="schedule", params={"p": 1}, verdict="PASS", trustworthy=True,
+        baseline=EdgeBaseline(expectancy=0.5, sigma=1.0, n_trades=500)))  # no rate
+
+    main(["--book", "book_a", "--ledger", path,
+          "--book-factory", "tests.test_runner:build_with_trades",
+          "--edge-decay", "--arl0-years", "10", "--dry-run"])
+    assert "--arl0-years cannot be applied" in capsys.readouterr().err
