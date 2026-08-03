@@ -6,6 +6,26 @@ breaking change are governed by [docs/api-stability.md](docs/api-stability.md).
 
 ## [Unreleased]
 
+### Added
+- **`--arl0-years`**, exposing the edge-decay CUSUM's false-alarm budget on the CLI.
+  `EdgeDecayTrigger` has always taken a `Thresholds`, but `__main__` built it with none,
+  so the budget was unreachable from the only place the monitor actually runs. It is the
+  one knob worth reaching for, because it buys detection latency roughly one for one:
+  measured on a real 47-market trend book (23.3 trades/yr), 25 years gives a 9.4-year
+  wait to call a halved edge, 10 years gives 5.1, and 6 gives 3.5. On a low-frequency
+  book the default can be slow enough to be decorative, so the number deserves choosing
+  rather than inheriting.
+
+  Omitting it passes `None` rather than a materialized `Thresholds()`, deliberately: the
+  default then comes from whichever crucible is installed, so a retune there reaches this
+  CLI without a matching change here.
+
+  Two silent-no-op paths are reported rather than shrugged at, since a tuning flag that
+  tunes nothing reads as applied: passing it without `--edge-decay`, and passing it when
+  the frozen baseline carries no firing rate (years are converted using that rate, so
+  crucible falls back to `monitor_arl0_trades` and the flag does nothing). A non-positive
+  budget raises, since it is a span of calendar time.
+
 ### Fixed
 - **The edge monitor's firing-rate channel was dead through the orchestrator.**
   `check_decay` built its `TradeLog` from bare floats (`TradeLog.from_arrays(trade_r)`),

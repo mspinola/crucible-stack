@@ -37,6 +37,13 @@ re-optimize, which taxes the honest N for no information. A baseline is only wri
 promotion, so the sequence is: teach the book `trade_r_since` and a
 `Reoptimization.baseline`, let one promotion happen, then turn the flag on.
 
+`--arl0-years` sets the CUSUM's false-alarm budget in calendar time, and it is the one
+knob worth reaching for. It buys detection latency roughly one for one: halve the budget
+and you roughly halve the years spent trading a halved edge before the alarm, at the cost
+of more false alarms. On a low-frequency book the default can be slow enough to be
+decorative, so the number is worth choosing rather than inheriting. Omit it and crucible's
+own default applies, which means a retune there reaches this CLI without a change here.
+
 Exit codes are chosen for cron's benefit: a non-zero status is how an unattended job gets
 someone's attention.
 
@@ -58,6 +65,7 @@ import importlib
 import sys
 from datetime import datetime
 
+from crucible_stack.orchestrate.decay import Thresholds
 from crucible_stack.orchestrate.ledger import DeploymentLedger
 from crucible_stack.orchestrate.runner import run_cycle
 from crucible_stack.orchestrate.trigger import (
@@ -68,6 +76,22 @@ from crucible_stack.orchestrate.trigger import (
 )
 
 EXIT_OK, EXIT_ERROR, EXIT_HALT, EXIT_MISSED = 0, 1, 3, 4
+
+
+def _decay_thresholds(args):
+    """Thresholds for the edge-decay monitor, or None to take crucible's defaults.
+
+    Returning None rather than a fresh `Thresholds()` is deliberate: the default then
+    comes from whichever crucible is installed, so a retune there reaches this CLI
+    without a matching change here. Building one eagerly would pin today's numbers.
+    """
+    if args.arl0_years is None:
+        return None
+    if not (args.arl0_years > 0):
+        raise ValueError(
+            f"--arl0-years must be positive, got {args.arl0_years}. It is a false-alarm "
+            "budget in calendar time, so zero or negative has no reading.")
+    return Thresholds(monitor_arl0_years=float(args.arl0_years))
 
 
 def _resolve(spec: str):
@@ -94,6 +118,12 @@ def build_parser() -> argparse.ArgumentParser:
                         "promotion. Off by default: the trigger fails open, so enabling it "
                         "before a baseline exists re-optimizes on every cycle. Requires the "
                         "book to expose trade_r_since(since, params).")
+    p.add_argument("--arl0-years", type=float, default=None,
+                   help="false-alarm budget for the edge-decay CUSUM, in YEARS "
+                        "(default: crucible's Thresholds, currently 25). Buys detection "
+                        "latency: halve the budget and you roughly halve the years to "
+                        "notice a halved edge, at the cost of more false alarms. Only "
+                        "meaningful with --edge-decay.")
     p.add_argument("--breach-level", type=float, default=None,
                    help="quantile counting as a drift breach (default: envelope's lowest)")
     p.add_argument("--dry-run", action="store_true",
@@ -183,6 +213,11 @@ def main(argv=None) -> int:
                     DriftTrigger(breach_level=args.breach_level)]
         trade_r = ()
         trade_dates = None
+        if args.arl0_years is not None and not args.edge_decay:
+            # A tuning flag that tunes nothing is worse than a missing one: it reads as
+            # applied. Say so rather than accepting it into a run that ignores it.
+            print("[orchestrate] note: --arl0-years is set but --edge-decay is off, so "
+                  "there is no CUSUM to budget and the value is ignored.", file=sys.stderr)
         if args.edge_decay:
             source = getattr(book, "trade_r_since", None)
             if source is None:
@@ -205,7 +240,18 @@ def main(argv=None) -> int:
                       "per-trade expectancy alone.", file=sys.stderr)
             else:
                 trade_dates = dated(since, params)
-            triggers.append(EdgeDecayTrigger())
+            # A budget in years is converted using the BASELINE's own firing rate, so a
+            # baseline that never learned one silently falls back to the trade-count
+            # budget and the flag does nothing. That is exactly the ambiguity the years
+            # unit exists to remove, so it is worth a line rather than a shrug.
+            frozen = incumbent.baseline if incumbent is not None else None
+            if (args.arl0_years is not None and frozen is not None
+                    and frozen.trades_per_year is None):
+                print("[orchestrate] note: --arl0-years cannot be applied; the frozen "
+                      "baseline carries no firing rate, so the budget falls back to "
+                      "Thresholds.monitor_arl0_trades. Freeze a baseline from a dated "
+                      "log to use a calendar-time budget.", file=sys.stderr)
+            triggers.append(EdgeDecayTrigger(thresholds=_decay_thresholds(args)))
 
         result = run_cycle(
             book=args.book,
