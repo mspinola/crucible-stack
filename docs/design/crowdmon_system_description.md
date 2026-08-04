@@ -266,7 +266,7 @@ Ownership metrics are step functions that update on filing dates. Do not interpo
 
 ## 7. Use cases — the retail workflow
 
-A retail trader is not going to move a market, so the value of this system is not the same as it is for a fund risk desk. A fund uses it to decide how much of a crowded book it can carry. A retail trader uses it to **avoid being the marginal participant in someone else's unwind** — to size correctly, to place stops that survive, and above all to correctly classify a drawdown while it is happening.
+A retail trader is not going to move a market, so the value of this system is not the same as it is for a fund risk desk. A fund uses it to decide how much of a crowded book it can carry. A retail trader uses it to **avoid being the marginal participant in someone else's unwind** — to size correctly, to choose protection that pays in a gap rather than triggering into one, and above all to correctly classify a drawdown while it is happening.
 
 The tool finds very few trades. It prevents a specific and expensive category of mistake.
 
@@ -282,9 +282,15 @@ Check the positioning-crowding percentile and exit-pressure percentile for the b
 
 *Trigger:* setting a stop on a name flagged as crowded.
 
-In a crowded, high-DTL name, a tight stop is a liability rather than a protection: the unwind gaps through it and fills far below. Use the downside-asymmetry metric (§4.2) and the square-root impact estimate (§5.2) to make the trade-off explicitly.
+**A stop is a trigger, not a guarantee.** It converts to a market order when touched and fills wherever the market next trades. In a crowded, high-DTL name that is exactly the moment the book is thin, so the fill arrives below the level, and it arrives *because* the cascade has started rather than before it. UC-1 states the same fact from the other side: the asymmetry the system flags is "when it falls, it will fall through your stop." Widening the stop does not change that. It changes where you find out.
 
-*Action:* a wider stop with a smaller position, sized so the wider stop costs the same dollars. Or replace the stop entirely with a long put and accept a known premium instead of an unknown slippage. The system's contribution is telling you *which* names need this treatment — applying it everywhere is just expensive.
+So the choice is not tight versus wide. It is between what protects and what merely triggers. Use the downside-asymmetry metric (§4.2) and the square-root impact estimate (§5.2) to price the gap explicitly, since §5.2 is denominated in the units the decision is actually made in.
+
+*Action:* on the names the system flags, prefer **defined-risk protection**: a long put, or a collar where the premium is unattractive on its own. That converts an unknown slippage into a known premium, and it is the only structure that pays *in* the gap rather than transacting into it. Where a stop is the only available tool, size the position so that a gap through the level is survivable, rather than sizing to the stop distance, because the stop distance is not what determines the loss.
+
+**Widening is a trade-off with two sides, not an improvement.** A wide stop keeps you in a *positioning unwind*, which UC-6 says usually mean-reverts, and it costs you more in a *fundamental repricing*, which UC-6 says does not. Which of the two you are in is UC-6's question, and it is answerable while the drawdown is happening, so that decision belongs there rather than being assumed here.
+
+The system's contribution is telling you *which* names need this treatment. Applying it everywhere is just expensive.
 
 ### UC-3 — Short-side screening
 
