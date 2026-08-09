@@ -5,13 +5,13 @@
 > a new `marketdata` sibling, and four consumers. Unlike ADR-0006 it **does** change a consumer
 > read contract, which is most of its cost.
 
-**Status:** Accepted (2026-07-27). The direction is settled: `cotdata` becomes COT-only and all
-bar data lives in `marketdata`. Accepted with **step 1 shipped and steps 2 to 4 outstanding**,
-which is a deliberate distinction from ADR-0006. That one was accepted after its architecture was
-implemented and validated end to end. This one is accepted as a direction, on the strength of step
-1 landing cleanly and of `marketdata` proving the receiving design in production. The disruptive
-move has not happened, so acceptance here authorises the remaining steps rather than recording
-them.
+**Status:** Accepted (2026-07-27). **Implemented 2026-08-09, with one part of the decision
+unimplemented: the databento provider did not move.** Steps 1 to 4 are otherwise done and every
+consumer reads bars from `marketdata`. The original acceptance was as a *direction*, on the
+strength of step 1 landing cleanly, with the disruptive move still ahead — a deliberate contrast
+with ADR-0006, which was accepted after end-to-end validation. That move has now happened. See
+[Status of the work](#status-of-the-work) for what shipped and for the one deviation, which is
+outstanding work rather than a boundary this ADR drew.
 **Date:** 2026-07-25 (accepted 2026-07-27)
 **Deciders:** Matt (sole maintainer)
 
@@ -206,58 +206,162 @@ Extract in the ADR-0004 style, so the disruptive step is decoupled from the desi
 
 1. **DONE (2026-07-26).** Make the seam explicit **inside** `cotdata`: separate store domains,
    separate manifests, separate CLI entry points.
-2. Move the price half into `marketdata` as the `futures` domain, beside the `equities` domain
-   already built, taking the contract-specs table and its `--metadata` flag with it. With step 1
-   done this is a file move plus a shim.
-3. Migrate consumers one repo at a time behind the shim, `livebook` last. Before touching
-   `costs.py`, give it a positive assertion that the specs table loaded, so the migration cannot
-   pass silently on zero costs. **The npf half of that guard is built** (npf#159).
-4. Remove the shim after a deprecation window. Optionally converge both packages on one store root.
+2. **DONE (2026-08-09), except databento.** Move the price half into `marketdata` as the
+   `futures` domain, beside the `equities` domain already built, taking the contract-specs table
+   and its `--metadata` flag with it. With step 1 done this is a file move plus a shim.
+3. **DONE (2026-08-09).** Migrate consumers one repo at a time behind the shim, `livebook` last.
+   Before touching `costs.py`, give it a positive assertion that the specs table loaded, so the
+   migration cannot pass silently on zero costs. **The npf half of that guard is built** (npf#159).
+4. **VOID** — no shim was built. Remove the shim after a deprecation window. Optionally converge
+   both packages on one store root.
 
 Step 1 delivers most of the clarity at a fraction of the risk and is worth doing on its own. That
 prediction held: it landed without touching a single consumer read.
 
+Two of step 2's predictions did not. It was **not** "a file move": `cot.py` importing only
+`store` made the *seam* clean, but the Norgate provider had to be rewritten against the
+tier-aware store rather than copied, since one frame per symbol cannot hold `backadj` and `unadj`
+at once. And no shim was built or needed — see Status of the work.
+
 ## Status of the work
 
-Updated 2026-07-27.
+Updated 2026-08-09.
 
-**Step 1 is complete.** `cotdata` PRs #55 (the seam), #56 (wrappers call the half-scoped entry
-points), #59 (stop writing the legacy manifest, plus a one-shot migration) and #61 (`--check`
-measures lag on write time). The live store now carries `manifests/cot.json` and
-`manifests/prices.json` with the legacy `manifest.json` deleted, the domains are split
-(`prices/` against `cot_legacy/`, `cot_disagg/`, `cot_tff/`, `metadata/`), and `cotdata-cot` and
-`cotdata-prices` ship beside `cotdata-update`.
+**Steps 1 to 4 are complete, with one exception recorded below.** `cotdata` 0.4.0 ships with no
+bar API, no Norgate and no yfinance; every consumer reads `marketdata.get_bars`.
 
-**Step 3's prerequisite is half built.** `npf.validation.costs.assert_specs_available` raises
-rather than charging zero when the specs table cannot price what is being traded, and its loader is
-source-agnostic so it names which package served the table and flags any other that also could:
-mid-migration both can, and silently taking the first is how a stale table goes unnoticed.
-`livebook` is NOT covered. It calls `contract_specs()` in six places at the default
-`required=False`, so it would degrade to an empty frame and keep running. That is a live book and
-the change is deliberately deferred.
+| Step | State | Where |
+|---|---|---|
+| 1. Make the seam explicit inside `cotdata` | done 2026-07-26 | `cotdata` #55, #56, #59, #61 |
+| 2. Move the price half into `marketdata` | done 2026-08-09, **minus databento** | `marketdata` #7, #8, #10; `cotdata` #103, #104, #105 |
+| 3. Migrate consumers | done 2026-08-09 | `cotmetrics` #11, `cot-analyzer` #26, `npf` #196 and #197, `livebook` #10 |
+| 4. Remove the shim | **void** — no shim was built, see below | — |
 
-**Step 2 has not started.** `prices.py` still lives in `cotdata`. What moves is roughly 1,700
-lines: `providers/databento.py` (1015), `providers/norgate.py` (469), `prices.py` (167),
-`providers/yfinance.py` (70), plus `metadata/contract_specs.parquet` and `--metadata`.
-`marketdata` exists with the `equities` domain, the yfinance provider, the three-tier adjustment
-derived on read, a pin test reproducing the vendor's own adjusted column, and a manifest-level
-`universe_is_point_in_time` flag. The `futures` domain is declared in `adjust.DOMAIN_TIERS` so
-error messages are correct from the first day, but has no provider yet.
+Contract specs moved with the producer as the 2026-07-26 amendment requires: `marketdata` owns
+`metadata/contract_specs.parquet` and the `--metadata` flag, and `cotdata`'s
+`store.{write,upsert,read}_metadata` are gone. `marketdata` is published as **`crucible-marketdata`**
+(the import stays `marketdata`; the obvious distribution name is taken on PyPI by an abandoned
+2020 project), which forced a dependency rename in `cotmetrics` #12 and `cot-analyzer` #28.
 
-`databento.py` arriving after this ADR was written makes `cotdata` *more* price-heavy than the
-measurements above, which strengthens the case and enlarges step 2 at the same time.
+### The one deviation: databento did not move
+
+**This ADR says it should have.** Two passages, both explicit:
+
+> Norgate futures and databento are not two things. They are two providers of the same thing …
+> Separating them would break the abstraction they were built to share.
+
+and step 2's own inventory names `providers/databento.py` (1015 lines) as the **largest single
+file** that moves. So databento remaining in `cotdata` is a deviation from the decision, not an
+exception the decision carved out, and it should not be read as one.
+
+**Why it stayed.** Not for an architectural reason. It was neither ported nor deleted:
+
+- **Porting it is its own piece of work.** It is not a file move. It is a two-stage paid-API
+  producer with an append-only raw bronze store, its own ingest manifest, a two-directional
+  reconcile path, a windowed statistics fetch and a build-stage unit scale — around 1,100 lines
+  with no counterpart in `marketdata`, whose futures provider is Norgate-shaped.
+- **Deleting it would have destroyed working, validated code with no replacement.** ADR-0006 is
+  Accepted on the strength of databento's end-to-end validation against Norgate, and it is the
+  fleet's only intraday-capable source. A deletion in service of a boundary would have thrown
+  that away to make a package description true.
+
+So it was left in place as the lesser of two bad options. **It is outstanding work.**
+
+**What it costs, concretely.** `cotdata`'s *public API* is COT-only; its *store* is not. Keeping
+databento means keeping `store.write_prices` / `read_prices`, `config.prices_dir()` and the
+`prices` half of the manifest, because databento writes through all of them. The line this ADR
+drew — "`cotdata` keeps CFTC positioning and nothing else" — is now true of what a consumer can
+import and false of what the store holds. Two packages can still write futures bars, which is
+the coupling the contract-specs amendment argued against under "one vendor integration, one
+home". And it sharpens the third open question below rather than leaving it where it was: a
+databento-sourced dashboard would read bars from `$COTDATA_STORE/prices/` while everything else
+in the fleet reads `$MARKETDATA_STORE/bars/futures/`.
+
+**What it does not cost.** Nothing is broken today. databento is not the source for any deployed
+consumer — the dash server is on synced Norgate per ADR-0006's Outcome — so the split store is a
+latent inconsistency rather than a live one.
+
+### No shim was built, and none was needed
+
+The Consequences section planned "a re-export shim and a deprecation window rather than a clean
+cut", and step 4 was to remove it. **The cut was clean.** Ordering made the shim unnecessary and
+would have made it harmful:
+
+- By the time `cotdata` #105 deleted `get_prices`, every consumer had already been repointed and
+  verified, so a shim would have protected nobody.
+- A shim forwarding to `marketdata` would have been fine; a shim left reading `cotdata`'s own
+  store would not. That store is no longer filled by the nightly job, so the failure mode is a
+  number that looks right and is months old, which is strictly worse than an `AttributeError`.
+  `cotdata` therefore asserts in a test that `get_prices` and `roll_dates` stay gone.
+
+Step 4's shim half is void. Its optional second half — converging the two packages on one store
+root — is untouched and stays in Open questions.
+
+### Two measurements from the ADR that came out differently
+
+**The move was smaller than predicted, because databento stayed.** Step 2 estimated roughly 1,700
+lines moving. About 700 did: `providers/norgate.py` (469, arriving as 546), `prices.py` (167) and
+`providers/yfinance.py` (70). databento's ~1,100 did not, so `cotdata` remains roughly 18% price
+code by line — the mismatch this ADR was written to remove is reduced, not eliminated.
+
+**`propadj` got stronger than "derived on read".** The second open question is resolved and then
+some: `marketdata` derives it from the two stored tiers and **refuses** when only one is present,
+rather than returning an empty frame. The producer writes both tiers or neither. That closes the
+failure the Treasury seasonal hit, where a wrong tier passed a spot check — additive
+back-adjusted percent volatility is ~200x too high for soybeans and **0.47x** for gold, and 0.47x
+never goes negative.
+
+### A process finding worth carrying to the next extract
+
+Step 2 ported the Norgate provider **without its tests**, and the gap was invisible for two weeks
+because the test *files* existed on both sides. Diffing the test *names* across the 30 that
+`cotdata` was about to delete gave **zero overlap** — which reads like a renaming and was, under
+it, seven behaviours that would have had no test anywhere the moment the deletion landed
+(volume reconstruction, the volume-rank contract pick, the incremental window, the full rebuild,
+the NDU-down abort, the all-null spec-row skip). Found only because §7.5 went to delete them, and
+fixed in `marketdata` #13.
+
+The same shape appeared twice more in the same step. `finals_ready()` was ported in step 2 and
+wired to no CLI flag, so `cotdata`'s `--require-final` was its only caller and deleting that would
+have silently ungated the nightly capture (`marketdata` #12). And two databento parity harnesses
+read the Norgate store **by path**, so no call-site grep found them.
+
+The lesson generalises past this ADR: **for an extract in the ADR-0004 style, a call-site census
+is not a coverage census.** Count what the tests assert and what reaches each entry point, not
+what files exist.
 
 ## Open questions
 
-- Whether the two packages converge on a single store root env var, and when. Both are now set
-  from the shell profile (`COTDATA_STORE`, `MARKETDATA_STORE`), and neither is set by any launcher,
-  so converging is still cheap.
-- Whether the futures `propadj` tier stays derived-on-read as it is today. **Evidence arrived
-  2026-07-27.** The month-end Treasury seasonal read futures through `cotdata.get_prices` and its
-  first run was VOIDED because `backadj` percent returns sign-inverted 15 of ZB's 100 trades:
-  additive back-adjustment can cross zero. Moving to `propadj` fixed it, so `propadj` is not a
-  nicety, it decided a verdict. `marketdata` derives every tier on read, which is the behaviour
-  that turned out to matter.
-- Whether the Linux server runs the `marketdata` futures producer itself after step 2, or keeps
-  receiving a synced store. databento is not currently declared in `cot-analyzer`'s own
-  requirements, so that wiring is unfinished either way.
+Updated 2026-08-09. Two of the three below are resolved; the rest is what remains.
+
+- **Port databento into `marketdata`, or accept the split permanently.** The live one, and the
+  only unimplemented part of the Decision (see Status of the work). Until it is settled,
+  `cotdata` holds a price store it has no consumer API for. Accepting the split permanently is a
+  legitimate answer, but it needs writing into the Decision as an amendment rather than being
+  left to read as unfinished work.
+- **Whether the two packages converge on a single store root env var, and when.** Unchanged and
+  still cheap, but no longer only cosmetic: a launcher now has two roots to get right, and one
+  has already been found half-wired (below).
+- ~~Whether the futures `propadj` tier stays derived-on-read.~~ **Resolved.** It stays derived,
+  and `marketdata` hardened it: deriving from one stored tier raises rather than returning empty,
+  and the producer writes both tiers or neither. The evidence that decided it is unchanged — the
+  month-end Treasury seasonal's first run was VOIDED because `backadj` percent returns
+  sign-inverted 15 of ZB's 100 trades.
+- **Whether the Linux server runs the `marketdata` futures producer itself, or keeps receiving a
+  synced store.** Still open, and the databento deviation sharpens it: a databento-sourced server
+  now reads bars from a *different package's store* than every other consumer. The dash is on
+  synced Norgate per ADR-0006's Outcome, so this is latent rather than live.
+
+Found while implementing, and not previously tracked here:
+
+- **`livebook/bin/daily.sh` guards `COTDATA_STORE` and not `MARKETDATA_STORE`.** The live job's
+  bars and contract specs both come from `marketdata` now, so the guard checks the store that
+  matters less. It fails closed rather than silently — `marketdata.config.store_root()` raises by
+  name on an unset root, and `livebook.specs.broker_specs` asks at `required=True` — so the
+  consequence is a traceback mid-run instead of a clear refusal at the top. Worth making
+  symmetric.
+- **The Status section's note that "`livebook` is NOT covered" for contract specs is out of
+  date.** `livebook.specs.broker_specs` now calls `contract_specs(required=True)` and asserts the
+  `Exchange` column resolves before the broker connects, which is the guard step 3 asked for.
+  `npf.validation.costs` resolves the table unambiguously from `marketdata` now that `cotdata`'s
+  copy is gone, and reports which package answered.
