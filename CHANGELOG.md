@@ -6,6 +6,13 @@ breaking change are governed by [docs/api-stability.md](docs/api-stability.md).
 
 ## [Unreleased]
 
+### Added
+
+- `simulate_rules` takes `stop_spec['fire']`: `'close'` (default, unchanged) fires the
+  structural stop on a close through the level; `'intraday'` treats it as a resting stop
+  order that fires on a touch and fills at the level, or at the open on a gap through it.
+  The risk unit is identical, so the two compare in R. Opt-in; no existing call changes.
+
 ## [0.2.0] - 2026-08-02
 
 The deployment-monitoring release. 0.1.0 shipped the define / search / size / deploy
