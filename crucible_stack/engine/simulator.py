@@ -8,6 +8,7 @@ control).
 Generalizes `validation.cmr_native_holdout.simulate_cmr_native`:
   • setup / trigger are arbitrary boolean Series (from a RulesStrategy)
   • stop_spec  ∈ {'wick'} | {'atr', mult} | {'atr_trail', mult, arm_r}
+    plus optional hard_r (intraday k×R fail-safe) and fire ∈ 'close' (default) | 'intraday'
   • exit_spec  ∈ any REGISTERED exit mode (see `strategies/exits.py`); the engine ships
     {'barriers', tp, timeout} | {'channel'} | {'atr_trail', mult} | {'reject_exit', reject_thr},
     and strategy-specific modes such as {'cot_neutral', legs} register themselves
@@ -44,6 +45,13 @@ def simulate_rules(df: pd.DataFrame, direction: str, is_equity: bool,
     arm_r = float(stop_spec.get('arm_r', 1.0))   # atr_trail: arm at k×R profit
     hard_r = stop_spec.get('hard_r')             # fail-safe intraday k×R stop (None = off)
     hard_r = float(hard_r) if hard_r is not None else None
+    # How the structural stop fires. 'close' (default, the rule as stated: a close
+    # through the level) or 'intraday' (a resting stop order at the level: fires on
+    # the bar Low/High, fills at the level or at the open on a gap through it). The
+    # risk unit is the same either way, so the two are comparable in R.
+    stop_fire = stop_spec.get('fire', 'close')
+    if stop_fire not in ('close', 'intraday'):
+        raise ValueError(f"stop_spec['fire'] must be 'close' or 'intraday', got {stop_fire!r}")
     exit_mode = exit_spec.get('mode', DEFAULT_EXIT_MODE)
     exit_cls = get_exit(exit_mode)   # raises listing registered modes if unknown
 
@@ -142,6 +150,15 @@ def simulate_rules(df: pd.DataFrame, direction: str, is_equity: bool,
                     break
                 if side < 0 and bar['High'] >= hlv:
                     exit_price, exit_reason = max(hlv, bar['Open']), 'hard'
+                    break
+            # intraday structural stop: a resting order at the level. Touch (<=)
+            # fires it, since a sell stop at L fills when L trades.
+            if stop_fire == 'intraday':
+                if side > 0 and bar['Low'] <= stop:
+                    exit_price, exit_reason = min(stop, bar['Open']), 'stop'
+                    break
+                if side < 0 and bar['High'] >= stop:
+                    exit_price, exit_reason = max(stop, bar['Open']), 'stop'
                     break
             # close-based stop breach (shared by both exit modes)
             if side > 0 and bar['Close'] < stop:
