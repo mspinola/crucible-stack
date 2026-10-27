@@ -446,6 +446,18 @@ store freshness and replica parity, and prints a GUARD PROOFS list of what it ca
 it on the box after changing anything here or after a suspicious night. Last run 2026-08-22: 30
 pass, 0 warn, 0 fail.
 
+**The wrappers are version controlled as of 2026-10-27**, in the private repo
+`mspinola/producer-scheduler`, whose working tree IS `C:\Users\matt\code\cotdata\scheduler` on
+the box. There is no deploy step, so the editable-install hazard applies in full: a checkout or a
+branch switch in that folder changes what fires tonight. Edit on the box, commit on the box. They
+are not in cotdata (which ignores `/scheduler/`) because these copies carry the Mac's hostname,
+SSH key paths and the VPS address; cotdata keeps path-scrubbed templates under
+`docs/examples/windows/` and the reasoning under `docs/WINDOWS_SCHEDULING.md`. The history starts
+one commit BEFORE the 2026-10-23 delivery fix, so that fix reads as a diff. Still outside version
+control, and named in the repo's README with the `Export-ScheduledTask` command that would close
+it: the task definitions themselves (triggers, args, the interactive-session flag), which live
+inside Windows rather than as files, so nothing notices if one is edited or recreated.
+
 | Task | Fires | Runs | Writes |
 |---|---|---|---|
 | `cotdata prices` | daily 20:55, repeats PT15M for PT5H | `scheduler\run-prices.cmd` | `MARKETDATA_STORE` (futures bars + specs), then both syncs |
