@@ -20,7 +20,7 @@ steps, and `requirements.txt` entries all use relative `../<repo>` paths.
 
 | Directory | Visibility | Role |
 |---|---|---|
-| `cotdata` | public, PyPI | data layer. Producer writes Parquet to a file store, consumers only read. Four CFTC reports since 2026-08-03: Legacy, Disaggregated, TFF, Supplemental |
+| `cotdata` | public, PyPI | data layer. Producer writes Parquet to a file store, consumers only read. Four CFTC reports since 2026-08-03 (Legacy, Disaggregated, TFF, Supplemental), and since 2026-10-31 both bases of the first three: futures-only in `cot_*/`, futures-and-options combined in `cot_*_combined/` |
 | `marketdata` | public | daily bars. Equity/ETF from yfinance (corporate-action adjustment derived on read, never stored); futures from Norgate since 2026-08-09. Created 2026-07-26 |
 | `cotmetrics` | public, PyPI | COT positioning index, signals, `CotIndexer`. Reads the cotdata store |
 | `cot-analyzer` | public, source app | Dash/Plotly UI over cotmetrics. Computes no metrics of its own |
@@ -511,14 +511,21 @@ Task names are historical (renaming means delete-and-recreate); `cotdata prices`
 ### cotdata store
 
 ```bash
-cotdata-update --cot-all                           # free CFTC download, any OS, all four reports
+cotdata-update --cot-all                           # free CFTC download, any OS, all seven series
 ```
 
-Store reads are local and never hit the network. Four CFTC reports, and the fourth is not on the
-same basis as the other three. `--cot-supplemental` (Commodity Index Trader, 13 agricultural
-markets, the only public source separating index flow):
+Store reads are local and never hit the network. Four CFTC reports, seven series: Legacy,
+Disaggregated and TFF are stored on BOTH bases since 2026-10-31 (cotdata ADR-0003),
+futures-only in `cot_legacy/` etc. and futures-and-options combined in `cot_*_combined/`,
+read with `get_cot(sym, report, combined=True)`. **The default stays futures-only** for those
+three, so `cotmetrics` and `cot-analyzer` read exactly what they always did; nothing in either
+consumes the combined series yet. Combined OI is a different quantity (ES 2,843,639 against
+1,955,711 on 2026-10-27), so never difference or ratio across bases. The fourth report,
+`--cot-supplemental` (Commodity Index Trader, 13 agricultural markets, the only public
+source separating index flow):
 
-- It is **futures-and-options COMBINED** where Legacy, Disaggregated and TFF are futures-only,
+- It is **futures-and-options COMBINED**, the only basis the CFTC publishes it on, and
+  therefore comparable with `cot_legacy_combined/` and not with `cot_legacy/`,
   so its `Open_Interest_All` is a different quantity for the same market and week. Nothing in
   the file says so; cotdata asserts the flag (established by matching OI against both Legacy
   series, 390/390 and 0/390). Do not difference or ratio across reports without accounting for
