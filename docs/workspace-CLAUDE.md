@@ -533,8 +533,15 @@ source separating index flow):
 - Its Index Traders does NOT nest inside Disaggregated's Swap Dealer: the taxonomy is Legacy,
   carved out of commercial, non-commercial AND non-commercial spreading. Anything relating the
   two reports is an inference across differently-partitioned classifications.
-- Coverage is **12 markets, then 13 from 2013**, with six renamed along the way. Derive the
-  covered set with `cotdata-vintage coverage`; treating it as constant misreports the universe.
+- Coverage is **12 markets, then 13 from 2013-04-02** (Soybean Meal), with six renamed along
+  the way. Derive the covered set with `cotdata-vintage coverage`; treating it as constant
+  misreports the universe.
+- It joins to **`cot_legacy_combined/`** exactly (OI and non-reportable agree on all 13,753
+  shared weeks 2006-2026), and its `_NoCIT` buckets are Legacy combined's buckets minus the
+  index traders. `cotdata.cit.decompose(name)` makes that join and is the one cross-report
+  subtraction that is interpretable. Between a fifth and two thirds of Legacy "commercial"
+  longs in these 13 markets is index money, so a commercial positioning index there reads a
+  mixture (`cotdata/docs/analysis/2026-10-31-cit-legacy-combined-decomposition.md`).
 
 Measurement detail, including why the OI identity is exact on only ~55% of market-weeks (combined
 reports round delta-weighted option equivalents; never worse than 2 contracts):
